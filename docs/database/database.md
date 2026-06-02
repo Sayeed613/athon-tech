@@ -16,10 +16,12 @@ erDiagram
     schools  ||--o{ parents                 : "registers"
     schools  ||--o{ classes                 : "creates"
     schools  ||--o{ subjects                : "offers"
+    schools  ||--o{ periods                 : "defines"
     schools  ||--o{ students                : "enrolls"
     schools  ||--o{ student_parents         : "tracks"
     schools  ||--o{ class_enrollments       : "manages"
     schools  ||--o{ teacher_class_subjects  : "assigns"
+    schools  ||--o{ timetable_entries       : "schedules"
     schools  ||--o{ attendance              : "records"
     schools  ||--o{ homeworks               : "assigns"
     schools  ||--o{ homework_submissions    : "collects"
@@ -46,6 +48,11 @@ erDiagram
     tests        ||--o{ test_questions      : "contains"
     tests        ||--o{ test_attempts       : "taken in"
     notifications ||--o{ notification_recipients : "delivers to"
+    academic_terms ||--o{ timetable_entries : "schedules"
+    classes     ||--o{ timetable_entries    : "follows"
+    subjects    ||--o{ timetable_entries    : "taught in"
+    teachers    ||--o{ timetable_entries    : "teaches"
+    periods     ||--o{ timetable_entries    : "slots"
 ```
 
 **ASCII overview:**
@@ -79,7 +86,24 @@ erDiagram
                     │            ▼       ▼
                     │      ┌─────────┐ ┌───────────┐
                     │      │ CLASSES │ │ SUBJECTS  │
-                    │      └────┬────┘ └───────────┘
+                    │      └────┬────┘ └─────┬─────┘
+                    │           │             │
+                    │           │             │
+                    │           ▼             ▼
+                    │     ┌────────────────────────┐
+                    │     │    TIMETABLE_ENTRIES    │
+                    │     │  (unified schedule:    │
+                    │     │   class + teacher +    │
+                    │     │   subject + day +      │
+                    │     │   period)              │
+                    │     └───────────┬────────────┘
+                    │                 │
+                    │                 ▼
+                    │           ┌──────────┐
+                    │           │ PERIODS  │
+                    │           │ (time    │
+                    │           │  slots)  │
+                    │           └──────────┘
                     │           │
                     ▼           ▼
               ┌────────┐  ┌──────────┐  ┌───────────────────┐
@@ -124,17 +148,18 @@ erDiagram
 | # | File | Contents | Depends On |
 |---|---|---|---|
 | 1 | `database/enums.sql` | **11 ENUM types** + `pgcrypto`/`citext` extensions | None |
-| 2 | `database/tables.sql` | **27 tables**, **69 FK constraints**, CHECK/UNIQUE constraints | enums.sql |
-| 3 | `database/indexes.sql` | **36 indexes** — partial, composite, covering, unique partial | tables.sql |
-| 4 | `database/triggers.sql` | **20 `updated_at` triggers** + **9 audit log triggers** on core tables | indexes.sql |
-| 5 | `database/rls.sql` | **`app` schema** with 8 helper functions + **RLS on 27 tables** (~80 policies) | triggers.sql |
-| 6 | `database/seed.sql` | **Demo school data** — 7 users, 2 classes, 5 subjects, sample content | rls.sql |
+| 2 | `database/tables.sql` | **29 tables**, **76 FK constraints**, CHECK/UNIQUE constraints | enums.sql |
+| 3 | `database/indexes.sql` | **41 indexes** — partial, composite, covering, unique partial | tables.sql |
+| 4 | `database/triggers.sql` | **22 `updated_at` triggers** + **10 audit log triggers** on core tables | indexes.sql |
+| 5 | `database/rls.sql` | **`app` schema** with 8 helper functions + **RLS on 29 tables** (~90 policies) | triggers.sql |
+| 6 | `database/seed.sql` | **Demo school data** — 7 users, 2 classes, 5 subjects, 8 periods, sample timetable | rls.sql |
 
 ## 3. Custom ENUM Types
 
 | Enum | Values | Used In |
 |---|---|---|
 | `user_role` | `super_admin`, `school_admin`, `principal`, `teacher`, `student`, `parent` | `users.role` |
+| — | `day_of_week` is SMALLINT with CHECK (1–6), not an ENUM | `timetable_entries.day_of_week` |
 | `attendance_status` | `present`, `absent`, `late`, `half_day` | `attendance.status` |
 | `question_type` | `multiple_choice`, `true_false`, `short_answer`, `long_answer`, `essay` | `homework_questions.question_type`, `test_questions.question_type` |
 | `attempt_status` | `pending`, `in_progress`, `submitted`, `graded`, `results_published` | `homework_submissions.status`, `test_attempts.status` |
@@ -163,20 +188,22 @@ erDiagram
 | 11 | `student_parents` | UUID | ✅ | ❌ | M:N student↔parent relationships |
 | 12 | `class_enrollments` | UUID | ✅ | ❌ | Enrollment history (across years/classes) |
 | 13 | `teacher_class_subjects` | UUID | ✅ | ✅ | Maps teachers → classes → subjects per term |
-| 14 | `attendance` | UUID | ✅ | ❌ | Daily attendance per student |
-| 15 | `homeworks` | UUID | ✅ | ✅ | Homework assignments (`version`, `is_published` for draft workflow) |
-| 16 | `homework_questions` | UUID | ✅ (via FK) | ❌ | Questions within a homework (`explanation` for AI feedback support) |
-| 17 | `homework_submissions` | UUID | ✅ | ❌ | Student homework submissions |
-| 18 | `homework_answers` | UUID | ✅ (via FK) | ❌ | Per-question answers in homework |
-| 19 | `tests` | UUID | ✅ | ✅ | Test/exam definitions (`version`, `is_published` for draft workflow) |
-| 20 | `test_questions` | UUID | ✅ (via FK) | ❌ | Questions within a test (`explanation` for student review mode) |
-| 21 | `test_attempts` | UUID | ✅ | ❌ | Student test attempts |
-| 22 | `test_answers` | UUID | ✅ (via FK) | ❌ | Per-question answers in test |
-| 23 | `reports` | UUID | ✅ | ❌ | Generated reports (generic — `report_type` enum + `data` JSONB, separate `generated_at` + `created_at`) |
-| 24 | `notifications` | UUID | ✅ | ❌ | Outbound notification records (`scheduled_at` for future/delayed delivery) |
-| 25 | `notification_recipients` | UUID | ✅ (via FK) | ❌ | Per-recipient delivery tracking with CHECK constraint enforcing exactly one of `user_id` or `parent_id` |
-| 26 | `audit_logs` | UUID | ✅ | ❌ (immutable) | Immutable audit trail |
-| 27 | `ai_generations` | UUID | ✅ | ❌ (immutable) | AI content generation audit & cost tracking (`generation_type` for faster filtering) |
+| 14 | `periods` | UUID | ✅ | ✅ | School day time slots (reference data) |
+| 15 | `timetable_entries` | UUID | ✅ | ✅ | Unified class & teacher schedule |
+| 16 | `attendance` | UUID | ✅ | ❌ | Daily attendance per student |
+| 17 | `homeworks` | UUID | ✅ | ✅ | Homework assignments (`version`, `is_published` for draft workflow) |
+| 18 | `homework_questions` | UUID | ✅ (via FK) | ❌ | Questions within a homework (`explanation` for AI feedback support) |
+| 19 | `homework_submissions` | UUID | ✅ | ❌ | Student homework submissions |
+| 20 | `homework_answers` | UUID | ✅ (via FK) | ❌ | Per-question answers in homework |
+| 21 | `tests` | UUID | ✅ | ✅ | Test/exam definitions (`version`, `is_published` for draft workflow) |
+| 22 | `test_questions` | UUID | ✅ (via FK) | ❌ | Questions within a test (`explanation` for student review mode) |
+| 23 | `test_attempts` | UUID | ✅ | ❌ | Student test attempts |
+| 24 | `test_answers` | UUID | ✅ (via FK) | ❌ | Per-question answers in test |
+| 25 | `reports` | UUID | ✅ | ❌ | Generated reports (generic — `report_type` enum + `data` JSONB, separate `generated_at` + `created_at`) |
+| 26 | `notifications` | UUID | ✅ | ❌ | Outbound notification records (`scheduled_at` for future/delayed delivery) |
+| 27 | `notification_recipients` | UUID | ✅ (via FK) | ❌ | Per-recipient delivery tracking with CHECK constraint enforcing exactly one of `user_id` or `parent_id` |
+| 28 | `audit_logs` | UUID | ✅ | ❌ (immutable) | Immutable audit trail |
+| 29 | `ai_generations` | UUID | ✅ | ❌ (immutable) | AI content generation audit & cost tracking (`generation_type` for faster filtering) |
 
 ## 5. Primary Keys
 
@@ -191,6 +218,8 @@ erDiagram
 | `students.class_id → classes.id` | Current class (denormalized); canonical history in `class_enrollments` |
 | `class_enrollments → students, classes, academic_years` | Full enrollment history per academic year |
 | `teacher_class_subjects → teachers, classes, subjects` | A teacher teaches a subject to a class |
+| `timetable_entries → periods` | Links schedule entries to time slots |
+| `timetable_entries → teachers, classes, subjects, academic_terms` | Unified schedule — who teaches what to whom when |
 | `principals → users` (1:1) | First-class role, separate from teachers |
 | `classes.class_teacher_id → teachers.id` (nullable) | Optional form teacher |
 | `homework_submissions.graded_by → users.id` | Admins, principals, and teachers can grade |
@@ -218,7 +247,7 @@ Constraint naming: `{child_table}_{column}_fk` (e.g. `homeworks_teacher_fk`).
 
 ## 8. Row Level Security
 
-Implemented in `database/rls.sql`. Full RLS on all 27 tables with ~80 policies.
+Implemented in `database/rls.sql`. Full RLS on all 29 tables with ~90 policies.
 
 **Architecture**:
 - **`app` schema** — 8 helper functions for policy evaluation, isolated from the `public` schema
@@ -249,14 +278,14 @@ Implemented in `database/rls.sql`. Full RLS on all 27 tables with ~80 policies.
 
 Implemented in `database/triggers.sql`. Two categories of triggers:
 
-**Automatic Timestamps (20 triggers)**:
+**Automatic Timestamps (22 triggers)**:
 - Generic `set_updated_at()` function sets `updated_at = now()` on every UPDATE
-- Applied to all 20 tables with an `updated_at` column
+- Applied to all 22 tables with an `updated_at` column
 - Tables without `updated_at` (immutable: audit_logs, ai_generations, homework_questions, etc.) have no trigger
 
-**Audit Logging (9 triggers)**:
+**Audit Logging (10 triggers)**:
 - Generic `audit_log_changes()` function captures INSERT/UPDATE/DELETE events
-- Applied to core business tables: schools, users, teachers, principals, students, classes, homeworks, tests, attendance
+- Applied to core business tables: schools, users, teachers, principals, students, classes, homeworks, tests, attendance, timetable_entries
 - Reads `app.current_user_id` and `app.current_ip_address` from session settings
 - High-volume tables (submissions, attempts, answers, notifications) are excluded to prevent runaway log growth
 

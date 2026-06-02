@@ -26,8 +26,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Metadata for autogenerate support (populated when models are created)
-# target_metadata = Base.metadata
+# Metadata for autogenerate support — populated from ORM models
+# When all models are created, uncomment the import below to enable
+# autogenerate detection of schema drifts.
+from app.models import Base
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
@@ -39,7 +42,7 @@ def run_migrations_offline() -> None:
     url = settings.database_url
     context.configure(
         url=url,
-        target_metadata=None,
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -50,7 +53,7 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection):
     """Helper to run migrations against a synchronous-style connection."""
-    context.configure(connection=connection, target_metadata=None)
+    context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
         context.run_migrations()

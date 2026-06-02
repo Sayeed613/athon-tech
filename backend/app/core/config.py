@@ -41,10 +41,6 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    # ─── JWT ───────────────────────────────────
-    jwt_algorithm: str = "RS256"
-    jwt_jwks_url: str = ""
-
     # ─── AI Providers ──────────────────────────
     openai_api_key: str = ""
     anthropic_api_key: str = ""
@@ -67,6 +63,12 @@ class Settings(BaseSettings):
     # ─── Monitoring ────────────────────────────
     sentry_dsn: str = ""
     datadog_api_key: str = ""
+
+    # ─── Computed Properties ───────────────────
+    @property
+    def jwt_jwks_url(self) -> str:
+        """Derive JWKS URL from Supabase project URL."""
+        return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
 
 
 settings = Settings()

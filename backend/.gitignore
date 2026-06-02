@@ -37,3 +37,10 @@ alembic/versions/*.pyc
 # ─── Logs ────────────────────────────────────
 *.log
 logs/
+
+# ─── Temp Test Files (root level only) ────────
+/test_*.py
+
+# ─── Database ────────────────────────────────
+*.db
+*.sqlite
