@@ -1,22 +1,25 @@
 # 🏫 Athon — AI-Powered School Management Platform
 
-AI-powered teacher productivity and parent communication platform for schools.
+AI-powered teacher productivity and parent communication platform for schools (Classes 1–10).
 
-**Stack**: FastAPI · PostgreSQL (Supabase) · SQLAlchemy 2.0 Async · Celery · Redis
+**Stack**: Python 3.14 · FastAPI · PostgreSQL 17 (Supabase) · SQLAlchemy 2.0 Async · Supabase Auth · Celery · Redis
 
 ---
 
-## Project Overview
+## Project Status
 
-| Layer | Technology | Status |
-|---|---|---|
-| **Database** | PostgreSQL 16 (27 tables, 11 ENUMs, 69 FKs) | ✅ Schema Deployed |
-| **Backend API** | FastAPI + Uvicorn | ✅ Running on :8000 |
-| **Database Connection** | SQLAlchemy 2.0 Async + asyncpg | ✅ Connected |
-| **Migrations** | Alembic (async) | ✅ Stamped at head |
-| **Auth** | Supabase Auth + JWT | 📋 Planned |
-| **Background Jobs** | Celery + Redis | 📋 Configured |
-| **AI Services** | OpenAI / Anthropic | 📋 Configured |
+| Layer | Status |
+|---|---|
+| **Database Schema** (29 tables, 11 ENUMs, 76 FKs) | ✅ Deployed & Seeded |
+| **Backend API** (FastAPI + Uvicorn) | ✅ Running on `:8000` |
+| **ORM Models** (User, Student, Teacher, Principal, Parent, School) | ✅ Complete |
+| **Authentication** (Supabase JWT + JWKS) | ✅ Login, /me, role-based access |
+| **School Context Middleware** (request.state population) | ✅ Complete |
+| **Database Connection** (SQLAlchemy 2.0 Async + asyncpg) | ✅ Connected |
+| **Migrations** (Alembic async) | ✅ Stamped at head |
+| **Background Jobs** (Celery + Redis) | 📋 Configured |
+| **AI Services** (OpenAI / Anthropic) | 📋 Configured |
+| **Business APIs** (Attendance, Homework, Tests, Reports) | 📋 Phase 2 |
 
 ---
 
@@ -36,45 +39,99 @@ cd backend
 cp .env.example .env
 # Edit .env with your Supabase credentials
 
-# 2. Create virtual environment (one time)
+# 2. Create virtual environment
 python -m venv .venv
 
 # 3. Install dependencies
-.venv/Scripts/pip install -e ".[dev]"
+.venv/Scripts/pip install -r requirements.txt
 
-# 4. Start the server
+# 4. Initialize database (creates schema + seeds data)
+.venv/Scripts/python scripts/setup_database.py
+
+# 5. Start the server
 .venv/Scripts/uvicorn app.main:app --reload
-```
-
-### Database Setup
-
-Run the SQL files in order via Supabase SQL Editor or psql:
-
-```bash
-psql "$DATABASE_URL" \
-  -f database/enums.sql \
-  -f database/tables.sql \
-  -f database/indexes.sql \
-  -f database/triggers.sql \
-  -f database/rls.sql \
-  -f database/seed.sql
 ```
 
 ### Verify
 
 ```bash
-# Server health
+# Health check
 curl http://127.0.0.1:8000/api/v1/health
-# → {"status":"healthy","service":"athon-backend","version":"0.1.0"}
 
-# Database connectivity
-curl http://127.0.0.1:8000/api/v1/health/database
-# → {"status":"healthy","database":"connected"}
+# Login
+curl -X POST http://127.0.0.1:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@athondemo.edu","password":"Athon2025!"}'
+
+# Get current user (replace <token>)
+curl http://127.0.0.1:8000/api/v1/auth/me \
+  -H "Authorization: Bearer <token>"
+
+# Get school context
+curl http://127.0.0.1:8000/api/v1/auth/context \
+  -H "Authorization: Bearer <token>"
 
 # Swagger docs
-start http://127.0.0.1:8000/docs  # Windows
-# open http://127.0.0.1:8000/docs  # macOS
+open http://127.0.0.1:8000/docs
 ```
+
+---
+
+## Test Accounts
+
+All users share the password: **`Athon2025!`**
+
+| Role | Email | Supabase User ID |
+|---|---|---|
+| **School Admin** | admin@athondemo.edu | `490ebed2-7450-415d-859b-a999b823d814` |
+| **Principal** | principal@athondemo.edu | `89a2a317-3c01-423c-b4e4-3663472f93aa` |
+| **Teacher** | teacher@athondemo.edu | `d829a4c6-b598-4ce8-ae4b-4e71af1a0fc4` |
+| **Student** | student@athondemo.edu | `16dad9d3-a386-46d4-a313-4892455f2c53` |
+| **Parent** | parent@athondemo.edu | `0e16568c-49d0-4fa1-95ab-dd5b4de51b37` |
+| **Student 2** | student2@athondemo.edu | `ff2a17f1-b302-4260-b5ea-e3e861b689ee` |
+
+---
+
+## Live API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/health` | ❌ | Service health check |
+| `GET` | `/api/v1/health/database` | ❌ | Database connectivity check |
+| `POST` | `/api/v1/auth/login` | ❌ | Authenticate with email/password |
+| `GET` | `/api/v1/auth/me` | ✅ JWT | Get current user profile |
+| `GET` | `/api/v1/auth/context` | ✅ JWT | Get school context (user_id, school_id, role, email) |
+| `GET` | `/docs` | ❌ | Swagger UI |
+| `GET` | `/redoc` | ❌ | ReDoc UI |
+
+---
+
+## Authentication Architecture
+
+```
+Client                          FastAPI                         Supabase Auth         PostgreSQL
+  │                                │                               │                    │
+  │  POST /auth/login              │                               │                    │
+  │  {email, password}             │                               │                    │
+  │ ──────────────────────────────►│                               │                    │
+  │                                │  POST /auth/v1/token          │                    │
+  │                                │  ?grant_type=password         │                    │
+  │                                │ ─────────────────────────────►│                    │
+  │                                │◄──────── JWT + user ──────────│                    │
+  │                                │                               │                    │
+  │                                │  SELECT user WHERE            │                    │
+  │                                │  supabase_user_id = sub      ────────────────────►│
+  │                                │◄──── User ORM instance ────────│                    │
+  │◄─── LoginResponse {token,      │                               │                    │
+  │       user {id, name, email,   │                               │                    │
+  │             role, school_id}   │                               │                    │
+```
+
+**Key design decisions:**
+- **Zero password storage** — All credential verification delegated to Supabase Auth
+- **JWKS verification** — JWT signatures verified against Supabase's ES256 public keys (cached, supports key rotation)
+- **`supabase_user_id` foreign key** — Links Athon user records to Supabase Auth identities
+- **Dependency-based context** — `get_current_context()` populates `request.state` with `{user_id, school_id, role, email}`
 
 ---
 
@@ -82,85 +139,72 @@ start http://127.0.0.1:8000/docs  # Windows
 
 ```
 athon-tech/
-├── backend/                    # FastAPI application (+185 files)
+├── backend/                        # FastAPI application
 │   ├── app/
-│   │   ├── main.py             # App factory (CORS, middleware, lifespan)
-│   │   ├── core/               # Config, database engine, security
-│   │   ├── api/v1/             # 17 route files + schemas + deps
-│   │   ├── domain/             # 11 bounded contexts
-│   │   ├── repository/         # 29 files (base + unit_of_work + 27 repos)
-│   │   ├── infrastructure/     # AI, messaging, PDF providers
-│   │   ├── workers/            # Celery tasks + scheduler
-│   │   ├── middleware/         # Auth, session, logging, error handler
-│   │   └── common/             # Exceptions, pagination, permissions
-│   ├── alembic/                # Async migrations (stamped at head)
-│   ├── tests/                  # Unit, integration, e2e
-│   ├── pyproject.toml          # Dependencies (source of truth)
-│   └── requirements.txt        # Pinned deps (generated)
-│
-├── database/                   # PostgreSQL schema
-│   ├── enums.sql               # 11 ENUM types + extensions
-│   ├── tables.sql              # 27 tables + 69 FK constraints
-│   ├── indexes.sql             # 36 indexes (partial, composite)
-│   ├── triggers.sql            # 20 updated_at + 9 audit triggers
-│   ├── rls.sql                 # RLS policies (~80) + helper functions
-│   └── seed.sql                # Demo data (7 users, 2 classes)
-│
+│   │   ├── main.py                 # App factory (CORS, lifespan, middleware)
+│   │   ├── core/
+│   │   │   ├── config.py           # Pydantic BaseSettings (30+ env vars)
+│   │   │   ├── database.py         # Async SQLAlchemy engine + sessions
+│   │   │   └── security.py         # JWT verification via JWKS
+│   │   ├── api/
+│   │   │   ├── v1/                 # Route files (health, auth)
+│   │   │   ├── deps/auth.py        # get_current_user, get_current_context, require_role
+│   │   │   └── schemas/            # Pydantic models (auth, context)
+│   │   ├── models/                 # ORM models (User, Student, Teacher, etc.)
+│   │   ├── domain/                 # 11 bounded contexts (stubs)
+│   │   ├── repository/             # 29 repository files (stubs)
+│   │   ├── infrastructure/         # AI, messaging, storage (stubs)
+│   │   ├── workers/                # Celery tasks (stubs)
+│   │   ├── middleware/             # Auth, session, logging (stubs)
+│   │   └── common/                 # Exceptions, pagination (stubs)
+│   ├── scripts/
+│   │   └── setup_database.py       # Schema + seed + Auth ID sync
+│   ├── alembic/                    # Async migration config
+│   ├── tests/                      # Test suite (stubs)
+│   ├── .env                        # Supabase credentials (gitignored)
+│   ├── pyproject.toml              # Dependencies
+│   └── requirements.txt            # Pinned deps
+├── database/
+│   ├── enums.sql                   # 11 ENUM types
+│   ├── tables.sql                  # 29 tables + 76 FK constraints
+│   ├── indexes.sql                 # 41 indexes
+│   ├── triggers.sql                # 22 updated_at + 10 audit triggers
+│   ├── rls.sql                     # ~90 RLS policies
+│   └── seed.sql                    # Demo school data
 ├── docs/
-│   ├── database/database.md    # Full schema docs + ERD diagram
-│   └── backend/backend.md      # Full backend docs + implementation steps
-│
-├── LICENSE
+│   ├── database/database.md        # Full schema docs + ERD
+│   └── backend/backend.md          # Full backend architecture docs
+├── report.md                       # Detailed implementation report
 └── README.md
 ```
 
 ---
 
-## Documentation
+## Database Architecture
 
-| For | Document | Covers |
+**29 tables**, **11 ENUM types**, **76 foreign keys**, **~90 RLS policies**
+
+| Module | Tables | Key Entities |
 |---|---|---|
-| **Database Schema** | [`docs/database/database.md`](docs/database/database.md) | 27 tables, 11 ENUMs, 69 FKs, ERD, RLS, triggers, seed data, naming conventions |
-| **Backend Architecture** | [`docs/backend/backend.md`](docs/backend/backend.md) | Architecture, folder structure, API design, auth flow, service/repository layers, background jobs, notifications, AI services, deployment, all 6 implementation steps, ADRs |
-
----
-
-## Implementation Status
-
-| Step | Description | Status |
-|---|---|---|
-| 1 | Folder structure (layered architecture, ~185 files) | ✅ Complete |
-| 2 | Development environment (venv, deps, config) | ✅ Complete |
-| 3 | Cleanup & restructuring (app/core/, health endpoint) | ✅ Complete |
-| 4 | FastAPI bootstrap (app factory, CORS, middleware) | ✅ Complete |
-| 5 | Database connection (async engine, health check, fail-fast startup) | ✅ Complete |
-| 6 | Alembic migrations (async, stamped at head, workflow docs) | ✅ Complete |
-| 7 | ORM models | 📋 Next |
-| 8 | Auth endpoints | 📋 Planned |
-| 9 | Schools CRUD | 📋 Planned |
-
----
-
-## Current Live Endpoints
-
-| Endpoint | Method | Response |
-|---|---|---|
-| `/api/v1/health` | GET | `{"status":"healthy","service":"athon-backend","version":"0.1.0"}` |
-| `/api/v1/health/database` | GET | `{"status":"healthy","database":"connected"}` |
-| `/docs` | GET | Swagger UI |
-| `/redoc` | GET | ReDoc UI |
-| `/openapi.json` | GET | OpenAPI spec |
-
----
-
-## Architecture Highlights
+| **Tenant** | 1 | schools |
+| **Identity** | 6 | users, teachers, principals, parents, students, student_parents |
+| **Academic** | 7 | academic_years, academic_terms, classes, subjects, class_enrollments, teacher_class_subjects, periods |
+| **Timetable** | 1 | timetable_entries |
+| **Attendance** | 1 | attendance |
+| **Homework** | 4 | homeworks, homework_questions, homework_submissions, homework_answers |
+| **Tests** | 4 | tests, test_questions, test_attempts, test_answers |
+| **Reports** | 1 | reports |
+| **Notifications** | 2 | notifications, notification_recipients |
+| **Audit** | 1 | audit_logs |
+| **AI** | 1 | ai_generations |
 
 ### Multi-Tenant Design
-- Every tenant-scoped table includes `school_id UUID NOT NULL`
-- RLS policies enforce isolation at the database level
-- Session context set by middleware: `app.current_school_id`, `app.current_user_id`, `app.current_user_role`
+- Every tenant-scoped table has `school_id UUID NOT NULL`
+- RLS policies enforce tenant isolation at the database level
+- Session context: `SET app.current_school_id = '<uuid>'`
 
 ### Security Model (6 Roles)
+
 | Role | Scope |
 |---|---|
 | **super_admin** | Platform-wide (bypasses RLS) |
@@ -170,27 +214,45 @@ athon-tech/
 | **student** | Own data only |
 | **parent** | Own children's data |
 
-### Key Design Decisions
-| Decision | Choice |
-|---|---|
-| **ORM** | SQLAlchemy 2.0 Async (not supabase-py sync client) |
-| **DB config** | `app.core.config.settings` (not hardcoded) |
-| **Startup** | Fail-fast if database unreachable |
-| **Migrations** | Alembic async with NullPool for short-lived connections |
-| **Supabase SDK** | `supabase-auth` + `postgrest` (avoids `pyiceberg` C++ build issue) |
+---
+
+## Implementation Status
+
+| Step | Description | Status |
+|---|---|---|
+| 1 | Folder structure (layered architecture) | ✅ Complete |
+| 2 | Development environment (venv, deps) | ✅ Complete |
+| 3 | Cleanup & restructuring | ✅ Complete |
+| 4 | FastAPI bootstrap (CORS, middleware, lifespan) | ✅ Complete |
+| 5 | Database connection (async engine, health check) | ✅ Complete |
+| 6 | Alembic migrations (async, stamped at head) | ✅ Complete |
+| 7 | ORM models (User, Student, Teacher, Principal, Parent, School) | ✅ Complete |
+| 8A | Auth service (JWT verification via JWKS) | ✅ Complete |
+| 8B | Login endpoint (Supabase Auth delegation) | ✅ Complete |
+| 8C | User provisioning (6 test users, DB sync) | ✅ Complete |
+| 9 | School context middleware (get_current_context) | ✅ Complete |
+| 10+ | Business APIs (Attendance, Homework, Tests, Reports) | 📋 Phase 2 |
 
 ---
 
-## File Reference
+## Bugs Fixed (During Implementation)
 
-| File | Idempotent | Notes |
+| Bug | Cause | Fix |
 |---|---|---|
-| `database/enums.sql` | ✅ Yes | `DO $$` handles duplicates |
-| `database/tables.sql` | ❌ No | Run once |
-| `database/indexes.sql` | ❌ No | Run once |
-| `database/triggers.sql` | ✅ Yes | `DROP IF EXISTS` + `CREATE OR REPLACE` |
-| `database/rls.sql` | ❌ Partial | Policies don't auto-drop |
-| `database/seed.sql` | ❌ No | Fixed UUIDs conflict on re-run |
+| Enum case mismatch | Python enum names (UPPER) vs DB values (lower) | Added `values_callable` to SAEnum |
+| JWKS clock skew | Server clock slightly behind Supabase | Added `leeway=30` to jwt_decode |
+| Timezone mismatch | Model used naive datetime, DB used TIMESTAMPTZ | Added `DateTime(timezone=True)` |
+| Hardcoded DB password | Setup script had literal password in DSN | Changed to read from settings |
+
+---
+
+## Documentation
+
+| For | Document | Covers |
+|---|---|---|
+| **Full Report** | [`report.md`](report.md) | Complete project report for ChatGPT review |
+| **Database Schema** | [`docs/database/database.md`](docs/database/database.md) | 29 tables, 11 ENUMs, 76 FKs, ERD, RLS, triggers |
+| **Backend Architecture** | [`docs/backend/backend.md`](docs/backend/backend.md) | Architecture, API design, auth flow, all layers |
 
 ---
 
