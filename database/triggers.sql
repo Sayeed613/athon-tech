@@ -145,6 +145,20 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
+    DROP TRIGGER IF EXISTS trg_periods_updated ON periods;
+    CREATE TRIGGER trg_periods_updated
+        BEFORE UPDATE ON periods
+        FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+END $$;
+
+DO $$ BEGIN
+    DROP TRIGGER IF EXISTS trg_timetable_entries_updated ON timetable_entries;
+    CREATE TRIGGER trg_timetable_entries_updated
+        BEFORE UPDATE ON timetable_entries
+        FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+END $$;
+
+DO $$ BEGIN
     DROP TRIGGER IF EXISTS trg_attendance_updated ON attendance;
     CREATE TRIGGER trg_attendance_updated
         BEFORE UPDATE ON attendance
@@ -302,6 +316,10 @@ COMMENT ON FUNCTION audit_log_changes IS 'Generic audit trigger: captures INSERT
 -- High-volume transactional tables (submissions, attempts, answers,
 -- notifications, notification_recipients) are EXCLUDED to prevent
 -- excessive audit log growth.
+--
+-- timetable_entries IS audited because schedule changes affect attendance
+-- marking, homework deadlines, and room allocation — compliance-sensitive.
+-- periods are NOT audited (reference data, like subjects).
 -- =============================================================================
 
 -- 4.1 Schools — tenant config changes (high sensitivity)
@@ -373,5 +391,14 @@ DO $$ BEGIN
     DROP TRIGGER IF EXISTS trg_attendance_audit ON attendance;
     CREATE TRIGGER trg_attendance_audit
         AFTER INSERT OR UPDATE OR DELETE ON attendance
+        FOR EACH ROW EXECUTE FUNCTION audit_log_changes();
+END $$;
+
+-- 4.10 timetable_entries — schedule changes affect attendance, homework,
+--     room allocation, and teacher workload (compliance-sensitive)
+DO $$ BEGIN
+    DROP TRIGGER IF EXISTS trg_timetable_entries_audit ON timetable_entries;
+    CREATE TRIGGER trg_timetable_entries_audit
+        AFTER INSERT OR UPDATE OR DELETE ON timetable_entries
         FOR EACH ROW EXECUTE FUNCTION audit_log_changes();
 END $$;

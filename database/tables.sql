@@ -454,11 +454,94 @@ COMMENT ON COLUMN teacher_class_subjects.is_class_teacher IS 'TRUE if this teach
 
 
 -- =============================================================================
+-- TIMETABLE
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 8.1 periods — School day time slots
+-- Defines the time slots that make up a school day (e.g. "Period 1: 08:00–08:45",
+-- "Morning Break: 09:30–09:50"). Each school defines its own period structure
+-- independently. period_number determines chronological ordering.
+-- is_break distinguishes instructional periods from breaks (recess, lunch).
+-- The UNIQUE(school_id, period_number) constraint ensures period numbers
+-- are sequential and non-conflicting per school.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE periods (
+    id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id       UUID            NOT NULL,
+    name            VARCHAR(50)     NOT NULL,
+    period_number   INTEGER         NOT NULL,
+    start_time      TIME            NOT NULL,
+    end_time        TIME            NOT NULL,
+    is_break        BOOLEAN         NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    deleted_at      TIMESTAMPTZ,
+
+    CONSTRAINT periods_school_number_uk UNIQUE (school_id, period_number),
+    CONSTRAINT periods_time_check CHECK (end_time > start_time)
+);
+
+COMMENT ON TABLE  periods IS 'School day time slots — each school defines its own period structure';
+COMMENT ON COLUMN periods.name IS 'Display name: "Period 1", "Morning Break", "Lunch", etc.';
+COMMENT ON COLUMN periods.period_number IS 'Chronological order (1 = first period of the day)';
+COMMENT ON COLUMN periods.is_break IS 'TRUE for recess/lunch periods (no subject assigned)';
+
+
+-- ---------------------------------------------------------------------------
+-- 8.2 timetable_entries — Unified class and teacher schedule
+-- The single source of truth for who teaches what subject to which class,
+-- in which period, on which day of the week, during a given academic term.
+--
+-- Replaces the need for separate teacher_schedules, class_schedules, and
+-- timetables tables. Both class and teacher schedules are derived by
+-- filtering this table by class_id or teacher_id.
+--
+-- Two UNIQUE constraints prevent double-booking:
+--   1. A class can have only one subject per (day, period)
+--   2. A teacher can teach only one class per (day, period)
+--
+-- day_of_week uses ISO-like numbering: 1 = Monday, 6 = Saturday.
+-- is_active allows disabling individual entries without soft-deleting them,
+-- enabling quick schedule adjustments (e.g., substitute teacher for a day).
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE timetable_entries (
+    id                UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id         UUID            NOT NULL,
+    academic_term_id  UUID            NOT NULL,
+    class_id          UUID            NOT NULL,
+    subject_id        UUID            NOT NULL,
+    teacher_id        UUID            NOT NULL,
+    period_id         UUID            NOT NULL,
+    day_of_week       SMALLINT        NOT NULL,
+    room_number       VARCHAR(20),
+    is_active         BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at        TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    deleted_at        TIMESTAMPTZ,
+
+    CONSTRAINT tt_class_period_uk
+        UNIQUE (academic_term_id, class_id, day_of_week, period_id),
+    CONSTRAINT tt_teacher_period_uk
+        UNIQUE (academic_term_id, teacher_id, day_of_week, period_id),
+    CONSTRAINT tt_day_of_week_check
+        CHECK (day_of_week >= 1 AND day_of_week <= 6)
+);
+
+COMMENT ON TABLE  timetable_entries IS 'Unified timetable — single source of truth for class and teacher schedules';
+COMMENT ON COLUMN timetable_entries.day_of_week IS '1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday';
+COMMENT ON COLUMN timetable_entries.is_active IS 'Allows disabling entries for temporary adjustments without deleting';
+COMMENT ON COLUMN timetable_entries.room_number IS 'Optional per-period room override; defaults to class default if NULL';
+
+
+-- =============================================================================
 -- ATTENDANCE
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 8.1 attendance — Daily attendance records
+-- 9.1 attendance — Daily attendance records
 -- Records one entry per student per day, marked by a teacher.
 -- The UNIQUE(student_id, date) constraint ensures exactly one record per
 -- student per day. Attendance is scoped to a class and academic term to
@@ -490,7 +573,7 @@ COMMENT ON COLUMN attendance.marked_by IS 'Teacher UUID who marked this attendan
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 9.1 homeworks — Homework assignments
+-- 10.1 homeworks — Homework assignments
 -- Created by teachers for a specific class and subject within a term.
 -- Draft/publish workflow: teachers create drafts (is_published = FALSE),
 -- review and edit, then publish when ready. Each edit increments the
@@ -526,7 +609,7 @@ COMMENT ON COLUMN homeworks.is_published IS 'FALSE = draft (students cannot see)
 
 
 -- ---------------------------------------------------------------------------
--- 9.2 homework_questions — Questions within a homework
+-- 10.2 homework_questions — Questions within a homework
 -- Supports multiple question types via the question_type enum.
 -- options JSONB stores MCQ choices as an array of objects:
 --   [{"label": "A", "text": "Option A"}, {"label": "B", "text": "Option B"}]
@@ -556,7 +639,7 @@ COMMENT ON COLUMN homework_questions.correct_answer IS 'Stored for auto-grading 
 
 
 -- ---------------------------------------------------------------------------
--- 9.3 homework_submissions — Student homework submissions
+-- 10.3 homework_submissions — Student homework submissions
 -- One submission per student per homework (enforced by UNIQUE constraint).
 -- graded_by references users (not teachers) so that school admins and
 -- principals can also grade submissions.
@@ -587,7 +670,7 @@ COMMENT ON COLUMN homework_submissions.total_score IS 'Denormalized from homewor
 
 
 -- ---------------------------------------------------------------------------
--- 9.4 homework_answers — Per-question answers within a submission
+-- 10.4 homework_answers — Per-question answers within a submission
 -- Scores are split into auto (for MCQ/TF) and manual (for written responses).
 -- updated_at is nullable since answers are immutable once submitted
 -- (regraded answers would update the record, setting a timestamp).
@@ -619,7 +702,7 @@ COMMENT ON COLUMN homework_answers.score_manual IS 'Teacher-assigned score for w
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 10.1 tests — Test/exam definitions
+-- 11.1 tests — Test/exam definitions
 -- Created by teachers with support for various test types (quiz, unit_test,
 -- midterm, final). Tests have configurable duration limits and can be
 -- scheduled for a specific date/time.
@@ -670,7 +753,7 @@ COMMENT ON COLUMN tests.is_results_published IS 'When TRUE, students can see the
 
 
 -- ---------------------------------------------------------------------------
--- 10.2 test_questions — Questions within a test
+-- 11.2 test_questions — Questions within a test
 -- Same structure as homework_questions. Supports auto-grading for
 -- objective question types via correct_answer storage.
 -- CASCADE: removing a test removes its questions.
@@ -697,7 +780,7 @@ COMMENT ON COLUMN test_questions.explanation IS 'Optional explanation or hint fo
 
 
 -- ---------------------------------------------------------------------------
--- 10.3 test_attempts — Student test attempts
+-- 11.3 test_attempts — Student test attempts
 -- Tracks start and submission times for duration monitoring.
 -- Scores are split into auto (MCQ/TF), manual (written), and total.
 -- UNIQUE(test_id, student_id) enforces one attempt per student per test.
@@ -731,7 +814,7 @@ COMMENT ON COLUMN test_attempts.graded_by IS 'References users — admins, princ
 
 
 -- ---------------------------------------------------------------------------
--- 10.4 test_answers — Per-question answers within a test attempt
+-- 11.4 test_answers — Per-question answers within a test attempt
 -- Same pattern as homework_answers with added answered_at timestamp
 -- to track how long each question took the student.
 -- CASCADE: removing an attempt removes its answers.
@@ -762,7 +845,7 @@ COMMENT ON COLUMN test_answers.answered_at IS 'Timestamp when the student answer
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 11.1 reports — Generated reports
+-- 12.1 reports — Generated reports
 -- A generic reports table supporting multiple use cases via the report_type
 -- ENUM (student_progress, class_performance, teacher_performance,
 -- attendance_summary, exam_results, custom).
@@ -804,7 +887,7 @@ COMMENT ON COLUMN reports.file_url IS 'Link to generated PDF document if exporte
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 12.1 notifications — Outbound notification records
+-- 13.1 notifications — Outbound notification records
 -- A notification represents a message sent to one or more recipients
 -- through various channels. sender_id is NULL for system-triggered
 -- notifications (e.g. automated attendance alerts).
@@ -830,7 +913,7 @@ COMMENT ON COLUMN notifications.sender_id IS 'NULL for system-generated notifica
 
 
 -- ---------------------------------------------------------------------------
--- 12.2 notification_recipients — Per-recipient delivery tracking
+-- 13.2 notification_recipients — Per-recipient delivery tracking
 -- Each notification can target multiple recipients through different channels
 -- (whatsapp, email, push, sms). contact_address stores the actual email or
 -- phone number used for delivery tracking and retry logic.
@@ -870,7 +953,7 @@ COMMENT ON COLUMN notification_recipients.contact_address IS 'Resolved email add
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 13.1 audit_logs — Immutable audit trail
+-- 14.1 audit_logs — Immutable audit trail
 -- Records all CREATE, UPDATE, and DELETE operations on core entities for
 -- compliance, debugging, and security investigations.
 -- old_data / new_data store before/after JSONB snapshots.
@@ -903,7 +986,7 @@ COMMENT ON COLUMN audit_logs.new_data IS 'Snapshot of the record after the chang
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 14.1 ai_generations — AI content generation audit trail
+-- 15.1 ai_generations — AI content generation audit trail
 -- Tracks all AI-generated content for auditing, cost tracking, and quality
 -- improvement. Records what was sent to the AI model and what was returned.
 -- Supports multiple entity types (homework_question, test_question, feedback,
@@ -954,14 +1037,14 @@ COMMENT ON COLUMN ai_generations.duration_ms IS 'Generation time in milliseconds
 --   NO ACTION: Prevents deletion if dependent rows exist (safe with soft deletes)
 -- =============================================================================
 
--- 15.1 schools (no FKs to other tables — root entity)
+-- 16.1 schools (no FKs to other tables — root entity)
 
--- 15.2 academic_years
+-- 16.2 academic_years
 ALTER TABLE academic_years
     ADD CONSTRAINT academic_years_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.3 academic_terms
+-- 16.3 academic_terms
 ALTER TABLE academic_terms
     ADD CONSTRAINT academic_terms_year_fk
     FOREIGN KEY (academic_year_id) REFERENCES academic_years(id);
@@ -969,12 +1052,37 @@ ALTER TABLE academic_terms
     ADD CONSTRAINT academic_terms_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.4 users
+-- 16.4 periods
+ALTER TABLE periods
+    ADD CONSTRAINT periods_school_fk
+    FOREIGN KEY (school_id) REFERENCES schools(id);
+
+-- 16.5 timetable_entries
+ALTER TABLE timetable_entries
+    ADD CONSTRAINT tt_school_fk
+    FOREIGN KEY (school_id) REFERENCES schools(id);
+ALTER TABLE timetable_entries
+    ADD CONSTRAINT tt_academic_term_fk
+    FOREIGN KEY (academic_term_id) REFERENCES academic_terms(id);
+ALTER TABLE timetable_entries
+    ADD CONSTRAINT tt_class_fk
+    FOREIGN KEY (class_id) REFERENCES classes(id);
+ALTER TABLE timetable_entries
+    ADD CONSTRAINT tt_subject_fk
+    FOREIGN KEY (subject_id) REFERENCES subjects(id);
+ALTER TABLE timetable_entries
+    ADD CONSTRAINT tt_teacher_fk
+    FOREIGN KEY (teacher_id) REFERENCES teachers(id);
+ALTER TABLE timetable_entries
+    ADD CONSTRAINT tt_period_fk
+    FOREIGN KEY (period_id) REFERENCES periods(id);
+
+-- 16.6 users
 ALTER TABLE users
     ADD CONSTRAINT users_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.5 teachers
+-- 16.7 teachers
 ALTER TABLE teachers
     ADD CONSTRAINT teachers_user_fk
     FOREIGN KEY (user_id) REFERENCES users(id);
@@ -982,7 +1090,7 @@ ALTER TABLE teachers
     ADD CONSTRAINT teachers_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.6 principals
+-- 16.8 principals
 ALTER TABLE principals
     ADD CONSTRAINT principals_user_fk
     FOREIGN KEY (user_id) REFERENCES users(id);
@@ -990,7 +1098,7 @@ ALTER TABLE principals
     ADD CONSTRAINT principals_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.7 parents
+-- 16.9 parents
 ALTER TABLE parents
     ADD CONSTRAINT parents_user_fk
     FOREIGN KEY (user_id) REFERENCES users(id);
@@ -998,7 +1106,7 @@ ALTER TABLE parents
     ADD CONSTRAINT parents_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.8 classes
+-- 16.10 classes
 ALTER TABLE classes
     ADD CONSTRAINT classes_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
@@ -1009,12 +1117,12 @@ ALTER TABLE classes
     ADD CONSTRAINT classes_teacher_fk
     FOREIGN KEY (class_teacher_id) REFERENCES teachers(id);
 
--- 15.9 subjects
+-- 16.11 subjects
 ALTER TABLE subjects
     ADD CONSTRAINT subjects_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.10 students
+-- 16.12 students
 ALTER TABLE students
     ADD CONSTRAINT students_user_fk
     FOREIGN KEY (user_id) REFERENCES users(id);
@@ -1025,7 +1133,7 @@ ALTER TABLE students
     ADD CONSTRAINT students_class_fk
     FOREIGN KEY (class_id) REFERENCES classes(id);
 
--- 15.11 student_parents
+-- 16.13 student_parents
 ALTER TABLE student_parents
     ADD CONSTRAINT sp_student_fk
     FOREIGN KEY (student_id) REFERENCES students(id);
@@ -1036,7 +1144,7 @@ ALTER TABLE student_parents
     ADD CONSTRAINT sp_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
 
--- 15.12 class_enrollments
+-- 16.14 class_enrollments
 ALTER TABLE class_enrollments
     ADD CONSTRAINT ce_student_fk
     FOREIGN KEY (student_id) REFERENCES students(id);
@@ -1050,7 +1158,7 @@ ALTER TABLE class_enrollments
     ADD CONSTRAINT ce_academic_year_fk
     FOREIGN KEY (academic_year_id) REFERENCES academic_years(id);
 
--- 15.13 teacher_class_subjects
+-- 16.15 teacher_class_subjects
 ALTER TABLE teacher_class_subjects
     ADD CONSTRAINT tcs_teacher_fk
     FOREIGN KEY (teacher_id) REFERENCES teachers(id);
@@ -1067,7 +1175,7 @@ ALTER TABLE teacher_class_subjects
     ADD CONSTRAINT tcs_academic_term_fk
     FOREIGN KEY (academic_term_id) REFERENCES academic_terms(id);
 
--- 15.14 attendance
+-- 16.16 attendance
 ALTER TABLE attendance
     ADD CONSTRAINT attendance_student_fk
     FOREIGN KEY (student_id) REFERENCES students(id);
@@ -1084,7 +1192,7 @@ ALTER TABLE attendance
     ADD CONSTRAINT attendance_academic_term_fk
     FOREIGN KEY (academic_term_id) REFERENCES academic_terms(id);
 
--- 15.15 homeworks
+-- 16.17 homeworks
 ALTER TABLE homeworks
     ADD CONSTRAINT homeworks_teacher_fk
     FOREIGN KEY (teacher_id) REFERENCES teachers(id);
@@ -1101,12 +1209,12 @@ ALTER TABLE homeworks
     ADD CONSTRAINT homeworks_academic_term_fk
     FOREIGN KEY (academic_term_id) REFERENCES academic_terms(id);
 
--- 15.16 homework_questions
+-- 16.18 homework_questions
 ALTER TABLE homework_questions
     ADD CONSTRAINT hq_homework_fk
     FOREIGN KEY (homework_id) REFERENCES homeworks(id) ON DELETE CASCADE;
 
--- 15.17 homework_submissions
+-- 16.19 homework_submissions
 ALTER TABLE homework_submissions
     ADD CONSTRAINT hs_homework_fk
     FOREIGN KEY (homework_id) REFERENCES homeworks(id);
@@ -1120,7 +1228,7 @@ ALTER TABLE homework_submissions
     ADD CONSTRAINT hs_graded_by_fk
     FOREIGN KEY (graded_by) REFERENCES users(id);
 
--- 15.18 homework_answers
+-- 16.20 homework_answers
 ALTER TABLE homework_answers
     ADD CONSTRAINT ha_submission_fk
     FOREIGN KEY (homework_submission_id) REFERENCES homework_submissions(id) ON DELETE CASCADE;
@@ -1128,7 +1236,7 @@ ALTER TABLE homework_answers
     ADD CONSTRAINT ha_question_fk
     FOREIGN KEY (question_id) REFERENCES homework_questions(id);
 
--- 15.19 tests
+-- 16.21 tests
 ALTER TABLE tests
     ADD CONSTRAINT tests_teacher_fk
     FOREIGN KEY (teacher_id) REFERENCES teachers(id);
@@ -1145,12 +1253,12 @@ ALTER TABLE tests
     ADD CONSTRAINT tests_academic_term_fk
     FOREIGN KEY (academic_term_id) REFERENCES academic_terms(id);
 
--- 15.20 test_questions
+-- 16.22 test_questions
 ALTER TABLE test_questions
     ADD CONSTRAINT tq_test_fk
     FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE;
 
--- 15.21 test_attempts
+-- 16.23 test_attempts
 ALTER TABLE test_attempts
     ADD CONSTRAINT ta_test_fk
     FOREIGN KEY (test_id) REFERENCES tests(id);
@@ -1164,7 +1272,7 @@ ALTER TABLE test_attempts
     ADD CONSTRAINT ta_graded_by_fk
     FOREIGN KEY (graded_by) REFERENCES users(id);
 
--- 15.22 test_answers
+-- 16.24 test_answers
 ALTER TABLE test_answers
     ADD CONSTRAINT tans_attempt_fk
     FOREIGN KEY (test_attempt_id) REFERENCES test_attempts(id) ON DELETE CASCADE;
@@ -1172,7 +1280,7 @@ ALTER TABLE test_answers
     ADD CONSTRAINT tans_question_fk
     FOREIGN KEY (question_id) REFERENCES test_questions(id);
 
--- 15.23 reports
+-- 16.25 reports
 ALTER TABLE reports
     ADD CONSTRAINT reports_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
@@ -1183,7 +1291,7 @@ ALTER TABLE reports
     ADD CONSTRAINT reports_generated_by_fk
     FOREIGN KEY (generated_by) REFERENCES users(id);
 
--- 15.24 notifications
+-- 16.26 notifications
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
@@ -1191,7 +1299,7 @@ ALTER TABLE notifications
     ADD CONSTRAINT notifications_sender_fk
     FOREIGN KEY (sender_id) REFERENCES users(id);
 
--- 15.25 notification_recipients
+-- 16.27 notification_recipients
 ALTER TABLE notification_recipients
     ADD CONSTRAINT nr_notification_fk
     FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE;
@@ -1202,7 +1310,7 @@ ALTER TABLE notification_recipients
     ADD CONSTRAINT nr_parent_fk
     FOREIGN KEY (parent_id) REFERENCES parents(id);
 
--- 15.26 audit_logs
+-- 16.28 audit_logs
 ALTER TABLE audit_logs
     ADD CONSTRAINT audit_logs_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);
@@ -1210,7 +1318,7 @@ ALTER TABLE audit_logs
     ADD CONSTRAINT audit_logs_user_fk
     FOREIGN KEY (user_id) REFERENCES users(id);
 
--- 15.27 ai_generations
+-- 16.29 ai_generations
 ALTER TABLE ai_generations
     ADD CONSTRAINT ai_generations_school_fk
     FOREIGN KEY (school_id) REFERENCES schools(id);

@@ -188,6 +188,8 @@ ALTER TABLE public.students                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_parents          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.class_enrollments        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teacher_class_subjects   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.periods                    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.timetable_entries          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.homeworks                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.homework_questions       ENABLE ROW LEVEL SECURITY;
@@ -585,41 +587,60 @@ CREATE POLICY p_ce_delete ON public.class_enrollments
     );
 
 
--- 4.12. teacher_class_subjects
---       Teachers see own assignments; school-wide for admin/principal.
-CREATE POLICY p_tcs_select_self ON public.teacher_class_subjects
-    FOR SELECT USING (
-        teacher_id IN (
-            SELECT t.id FROM public.teachers t WHERE t.user_id = app.current_user_id()
-        )
-    );
-
-CREATE POLICY p_tcs_select_school ON public.teacher_class_subjects
+-- 4.13. periods — Reference data (same pattern as subjects)
+--       School-wide read; write by school_admin/principal.
+CREATE POLICY p_periods_select ON public.periods
     FOR SELECT USING (
         school_id = app.current_school_id()
-        AND app.user_has_role('school_admin', 'principal')
     );
 
-CREATE POLICY p_tcs_insert ON public.teacher_class_subjects
+CREATE POLICY p_periods_insert ON public.periods
     FOR INSERT WITH CHECK (
         school_id = app.current_school_id()
         AND app.user_has_role('school_admin', 'principal')
     );
 
-CREATE POLICY p_tcs_update ON public.teacher_class_subjects
+CREATE POLICY p_periods_update ON public.periods
     FOR UPDATE USING (
         school_id = app.current_school_id()
         AND app.user_has_role('school_admin', 'principal')
     );
 
-CREATE POLICY p_tcs_delete ON public.teacher_class_subjects
+CREATE POLICY p_periods_delete ON public.periods
     FOR DELETE USING (
         school_id = app.current_school_id()
         AND app.user_has_role('school_admin')
     );
 
 
--- 4.13. attendance
+-- 4.14. timetable_entries — Unified schedule
+--       School-wide read (teachers see their classes through the unified view);
+--       write by school_admin/principal only.
+CREATE POLICY p_tt_select ON public.timetable_entries
+    FOR SELECT USING (
+        school_id = app.current_school_id()
+    );
+
+CREATE POLICY p_tt_insert ON public.timetable_entries
+    FOR INSERT WITH CHECK (
+        school_id = app.current_school_id()
+        AND app.user_has_role('school_admin', 'principal')
+    );
+
+CREATE POLICY p_tt_update ON public.timetable_entries
+    FOR UPDATE USING (
+        school_id = app.current_school_id()
+        AND app.user_has_role('school_admin', 'principal')
+    );
+
+CREATE POLICY p_tt_delete ON public.timetable_entries
+    FOR DELETE USING (
+        school_id = app.current_school_id()
+        AND app.user_has_role('school_admin')
+    );
+
+
+-- 4.15. attendance
 --       Teachers see their class attendance; school-wide for admin/principal;
 --       students see own; parents see children's.
 CREATE POLICY p_attendance_select_teacher ON public.attendance
@@ -664,7 +685,7 @@ CREATE POLICY p_attendance_delete ON public.attendance
     );
 
 
--- 4.14. homeworks
+-- 4.16. homeworks
 --       Teachers see own; school-wide for admin/principal.
 --       Students and parents see only published homeworks for their class.
 CREATE POLICY p_homeworks_select_teacher ON public.homeworks
@@ -730,7 +751,7 @@ CREATE POLICY p_homeworks_delete ON public.homeworks
     );
 
 
--- 4.15. homework_questions
+-- 4.17. homework_questions
 --       Visibility follows parent homework visibility.
 CREATE POLICY p_hq_select ON public.homework_questions
     FOR SELECT USING (
@@ -794,7 +815,7 @@ CREATE POLICY p_hq_delete ON public.homework_questions
     );
 
 
--- 4.16. homework_submissions
+-- 4.18. homework_submissions
 --       Students see own; teachers see submissions for their homework;
 --       school-wide for admin/principal.
 CREATE POLICY p_hs_select_student ON public.homework_submissions
@@ -847,7 +868,7 @@ CREATE POLICY p_hs_delete ON public.homework_submissions
     );
 
 
--- 4.17. homework_answers
+-- 4.19. homework_answers
 --       Visibility follows submission visibility.
 CREATE POLICY p_ha_select ON public.homework_answers
     FOR SELECT USING (
@@ -902,7 +923,7 @@ CREATE POLICY p_ha_update ON public.homework_answers
     );
 
 
--- 4.18. tests — Same pattern as homeworks
+-- 4.20. tests — Same pattern as homeworks
 CREATE POLICY p_tests_select_teacher ON public.tests
     FOR SELECT USING (
         teacher_id IN (
@@ -966,7 +987,7 @@ CREATE POLICY p_tests_delete ON public.tests
     );
 
 
--- 4.19. test_questions — Follows parent test visibility
+-- 4.21. test_questions — Follows parent test visibility
 CREATE POLICY p_tq_select ON public.test_questions
     FOR SELECT USING (
         EXISTS (
@@ -1027,7 +1048,7 @@ CREATE POLICY p_tq_delete ON public.test_questions
     );
 
 
--- 4.20. test_attempts — Students see own; teachers see their test attempts
+-- 4.22. test_attempts — Students see own; teachers see their test attempts
 CREATE POLICY p_ta_select_student ON public.test_attempts
     FOR SELECT USING (
         student_id IN (
@@ -1078,7 +1099,7 @@ CREATE POLICY p_ta_delete ON public.test_attempts
     );
 
 
--- 4.21. test_answers — Follows attempt visibility
+-- 4.23. test_answers — Follows attempt visibility
 CREATE POLICY p_tans_select ON public.test_answers
     FOR SELECT USING (
         EXISTS (
@@ -1131,7 +1152,7 @@ CREATE POLICY p_tans_update ON public.test_answers
     );
 
 
--- 4.22. reports
+-- 4.24. reports
 --       School-wide for staff; generated_by sees own; students/parents see published relevant reports.
 CREATE POLICY p_reports_select_staff ON public.reports
     FOR SELECT USING (
@@ -1163,7 +1184,7 @@ CREATE POLICY p_reports_delete ON public.reports
     );
 
 
--- 4.23. notifications
+-- 4.25. notifications
 --       Recipients see their own notifications; system/service_role handles inserts.
 CREATE POLICY p_notifications_select_recipient ON public.notifications
     FOR SELECT USING (
@@ -1193,7 +1214,7 @@ CREATE POLICY p_notifications_select_staff ON public.notifications
 -- Notifications are created by the system (service_role), not end-users
 
 
--- 4.24. notification_recipients
+-- 4.26. notification_recipients
 --       Recipients see own delivery records.
 CREATE POLICY p_nr_select ON public.notification_recipients
     FOR SELECT USING (
@@ -1206,7 +1227,7 @@ CREATE POLICY p_nr_select ON public.notification_recipients
 -- Notification recipients are managed by the system (service_role)
 
 
--- 4.25. audit_logs
+-- 4.27. audit_logs
 --       Only school_admin and super_admin can view audit logs.
 --       Audit logs are written by triggers, not end-users.
 CREATE POLICY p_audit_select ON public.audit_logs
@@ -1216,7 +1237,7 @@ CREATE POLICY p_audit_select ON public.audit_logs
     );
 
 
--- 4.26. ai_generations
+-- 4.28. ai_generations
 --       Users see own generations; school_admin sees school-wide.
 CREATE POLICY p_ai_select_self ON public.ai_generations
     FOR SELECT USING (

@@ -245,10 +245,48 @@ COMMENT ON INDEX idx_ai_created IS 'Time-range analytics per school for cost tra
 
 
 -- =============================================================================
--- 11. SPECIAL INDEXES
+-- 12. TIMETABLE
 -- =============================================================================
 
--- 11.1 Primary Parent Contact — partial unique index
+-- 12.1 Period list per school (ordered by period_number)
+CREATE INDEX idx_periods_school
+    ON periods(school_id, period_number)
+    WHERE deleted_at IS NULL;
+COMMENT ON INDEX idx_periods_school IS 'Ordered period list per school — dashboard and period selectors';
+
+-- 12.2 Class timetable — student dashboard and attendance context
+CREATE INDEX idx_tt_class_term
+    ON timetable_entries(academic_term_id, class_id, day_of_week, period_id)
+    INCLUDE (subject_id, teacher_id, room_number)
+    WHERE deleted_at IS NULL AND is_active = TRUE;
+COMMENT ON INDEX idx_tt_class_term IS 'Student/class schedule — today''s timetable for a class with covering (subject, teacher, room)';
+
+-- 12.3 Teacher timetable — teacher dashboard
+CREATE INDEX idx_tt_teacher_term
+    ON timetable_entries(academic_term_id, teacher_id, day_of_week, period_id)
+    INCLUDE (class_id, subject_id, room_number)
+    WHERE deleted_at IS NULL AND is_active = TRUE;
+COMMENT ON INDEX idx_tt_teacher_term IS 'Teacher dashboard — today''s schedule with covering (class, subject, room)';
+
+-- 12.4 Master timetable — admin/principal full-term view
+CREATE INDEX idx_tt_school_term
+    ON timetable_entries(school_id, academic_term_id, day_of_week, class_id, period_id)
+    WHERE deleted_at IS NULL AND is_active = TRUE;
+COMMENT ON INDEX idx_tt_school_term IS 'Admin full-term timetable — filters by school and term, ordered by day and class';
+
+-- 12.5 Subject occurrences — find when/where a subject is taught
+CREATE INDEX idx_tt_subject_term
+    ON timetable_entries(academic_term_id, subject_id, day_of_week, period_id)
+    INCLUDE (class_id, teacher_id)
+    WHERE deleted_at IS NULL AND is_active = TRUE;
+COMMENT ON INDEX idx_tt_subject_term IS 'Subject schedule lookup — which classes study a subject on which days';
+
+
+-- =============================================================================
+-- 13. SPECIAL INDEXES
+-- =============================================================================
+
+-- 13.1 Primary Parent Contact — partial unique index
 -- Ensures exactly one primary contact per student while allowing other
 -- parent relationships to have is_primary_contact = FALSE.
 CREATE UNIQUE INDEX idx_sp_primary_contact
@@ -256,53 +294,53 @@ CREATE UNIQUE INDEX idx_sp_primary_contact
     WHERE is_primary_contact = TRUE;
 COMMENT ON INDEX idx_sp_primary_contact IS 'Enforces one primary contact per student; partial index allows flexible non-primary relationships';
 
--- 11.2 Student-parent lookup by parent (inverse relationship)
+-- 13.2 Student-parent lookup by parent (inverse relationship)
 CREATE INDEX idx_sp_parent
     ON student_parents(parent_id)
     INCLUDE (student_id, relationship);
 COMMENT ON INDEX idx_sp_parent IS 'Parent dashboard — "show me my children" (includes relationship type)';
 
--- 11.3 Current enrollment lookups
+-- 13.3 Current enrollment lookups
 CREATE INDEX idx_ce_current_enrollments
     ON class_enrollments(student_id, status)
     WHERE status = 'active';
 COMMENT ON INDEX idx_ce_current_enrollments IS 'Fast lookup of student current enrollment for attendance and homework assignment';
 
--- 11.4 Class enrollment history view
+-- 13.4 Class enrollment history view
 CREATE INDEX idx_ce_class_history
     ON class_enrollments(class_id, academic_year_id, status);
 COMMENT ON INDEX idx_ce_class_history IS 'Class composition history — which students were in a class in a given year';
 
--- 11.5 Teacher's current assignments (dashboard)
+-- 13.5 Teacher's current assignments (dashboard)
 CREATE INDEX idx_tcs_teacher_current
     ON teacher_class_subjects(teacher_id, academic_term_id)
     WHERE deleted_at IS NULL;
 COMMENT ON INDEX idx_tcs_teacher_current IS 'Teacher dashboard — current class and subject assignments for the active term';
 
--- 11.6 Class form teacher lookup
+-- 13.6 Class form teacher lookup
 CREATE INDEX idx_classes_teacher
     ON classes(class_teacher_id)
     WHERE deleted_at IS NULL;
 COMMENT ON INDEX idx_classes_teacher IS 'Form teacher quick lookup — "which classes does this teacher manage"';
 
--- 11.7 Homework submission grading queue
+-- 13.7 Homework submission grading queue
 CREATE INDEX idx_hs_grading_queue
     ON homework_submissions(homework_id, status, created_at ASC)
     WHERE is_graded = FALSE;
 COMMENT ON INDEX idx_hs_grading_queue IS 'Grading queue — ungraded submissions ordered by submission time';
 
--- 11.8 Test attempt grading queue
+-- 13.8 Test attempt grading queue
 CREATE INDEX idx_ta_grading_queue
     ON test_attempts(test_id, status, submitted_at ASC)
     WHERE is_graded = FALSE;
 COMMENT ON INDEX idx_ta_grading_queue IS 'Grading queue — ungraded test attempts ordered by submission time';
 
--- 11.9 Homework submissions by student (student dashboard)
+-- 13.9 Homework submissions by student (student dashboard)
 CREATE INDEX idx_hs_student
     ON homework_submissions(student_id, created_at DESC);
 COMMENT ON INDEX idx_hs_student IS 'Student dashboard — homework submission history and status';
 
--- 11.10 Test attempts by student (student dashboard)
+-- 13.10 Test attempts by student (student dashboard)
 CREATE INDEX idx_ta_student
     ON test_attempts(student_id, created_at DESC);
 COMMENT ON INDEX idx_ta_student IS 'Student dashboard — test attempt history and scores';
