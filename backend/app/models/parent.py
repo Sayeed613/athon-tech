@@ -43,6 +43,7 @@ class Parent(TimestampMixin, SoftDeleteMixin, Base):
     # ── Relationships ───────────────────────────────────────────
     user = relationship("User", back_populates="parent")
     school = relationship("School", back_populates="parents")
+    student_parents = relationship("StudentParent", back_populates="parent")
 
     def __repr__(self) -> str:
         return f"<Parent user_id={self.user_id}>"

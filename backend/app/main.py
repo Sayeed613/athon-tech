@@ -73,9 +73,13 @@ app = FastAPI(
 # ─── Exception Middleware ───────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch-all exception handler returning standard error format."""
+    """Catch-all exception handler returning standard error format.
+
+    Includes CORS headers so the browser displays the actual error
+    instead of a misleading CORS policy error.
+    """
     logger.error("Unhandled exception: %s", exc, exc_info=True)
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={
             "data": None,
@@ -86,6 +90,21 @@ async def global_exception_handler(request: Request, exc: Exception):
             },
         },
     )
+    # Add CORS headers so error responses aren't blocked by the browser
+    origin = request.headers.get("origin", "")
+    if origin and origin in [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://localhost:5173",
+        "https://app.athonschool.com",
+    ]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 
 # ─── Request Logging Middleware ─────────────
@@ -109,8 +128,14 @@ async def log_requests(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        # Development — all common Next.js ports
         "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        # Vite dev server
         "http://localhost:5173",
+        # Production
         "https://app.athonschool.com",
     ],
     allow_credentials=True,

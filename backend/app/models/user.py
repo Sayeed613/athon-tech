@@ -80,5 +80,14 @@ class User(TimestampMixin, SoftDeleteMixin, Base):
     parent = relationship("Parent", back_populates="user", uselist=False)
     student = relationship("Student", back_populates="user", uselist=False)
 
+    # Notifications
+    sent_notifications = relationship("Notification", back_populates="sender")
+    notification_recipients = relationship("NotificationRecipient", back_populates="user")
+    announcements = relationship("Announcement", back_populates="sender")
+
+    # Audit & AI
+    audit_logs = relationship("AuditLog", back_populates="user")
+    ai_generations = relationship("AiGeneration", back_populates="user")
+
     def __repr__(self) -> str:
         return f"<User {self.email}: {self.role.value if hasattr(self.role, 'value') else self.role}>"

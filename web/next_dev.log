@@ -1,0 +1,24 @@
+▲ Next.js 16.2.7 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.31.164:3000
+- Environments: .env.local
+✓ Ready in 4.1s
+⚠ Slow filesystem detected. The benchmark took 814ms. If D:\Project\athon-tech\web\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+
+○ Compiling /login ...
+ GET /login 200 in 25.0s (next.js: 24.0s, application-code: 925ms)
+ GET /login 200 in 46s (next.js: 46s, application-code: 179ms)
+ GET /academic/assignments 200 in 913ms (next.js: 172ms, application-code: 741ms)
+ GET /login 200 in 454ms (next.js: 86ms, application-code: 368ms)
+ GET /login 200 in 311ms (next.js: 46ms, application-code: 266ms)
+ GET /dashboard 200 in 213ms (next.js: 89ms, application-code: 124ms)
+ GET /dashboard 200 in 76ms (next.js: 12ms, application-code: 64ms)
+ GET /attendance 200 in 187ms (next.js: 135ms, application-code: 52ms)
+ GET /attendance/mark 200 in 212ms (next.js: 147ms, application-code: 65ms)
+ GET /homework 200 in 198ms (next.js: 148ms, application-code: 50ms)
+○ Compiling /homework/[id] ...
+ GET /homework/f1e497a3-83f9-49e9-a37a-003224170f02 200 in 9.4s (next.js: 9.2s, application-code: 220ms)
+ GET /homework 200 in 62ms (next.js: 7ms, application-code: 55ms)
+ GET /homework/create 200 in 2.7s (next.js: 2.5s, application-code: 224ms)
+✓ Finished filesystem cache database compaction in 13.5s

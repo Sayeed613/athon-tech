@@ -69,9 +69,12 @@ class Student(TimestampMixin, SoftDeleteMixin, Base):
     # ── Relationships ───────────────────────────────────────────
     user = relationship("User", back_populates="student")
     school = relationship("School", back_populates="students")
-    # class_ relationship will be added when the Class model is created
-    # in a future phase. Define via string forward reference:
-    # class_ = relationship("Class", back_populates="students")
+    class_ = relationship("Class", back_populates="students")
+    class_enrollments = relationship("ClassEnrollment", back_populates="student")
+    attendance_records = relationship("Attendance", back_populates="student")
+    homework_submissions = relationship("HomeworkSubmission", back_populates="student")
+    test_attempts = relationship("TestAttempt", back_populates="student")
+    student_parents = relationship("StudentParent", back_populates="student")
 
     def __repr__(self) -> str:
         return f"<Student {self.admission_number}>"

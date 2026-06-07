@@ -8,18 +8,29 @@ AI-powered teacher productivity and parent communication platform for schools (C
 
 ## Project Status
 
+> **🚀 BACKEND MVP FROZEN — FRONTEND PHASE 1 APPROVED** (June 3, 2026)
+> See [`FREEZE.md`](FREEZE.md) for the complete UAT declaration.
+
 | Layer | Status |
 |---|---|
 | **Database Schema** (29 tables, 11 ENUMs, 76 FKs) | ✅ Deployed & Seeded |
-| **Backend API** (FastAPI + Uvicorn) | ✅ Running on `:8000` |
-| **ORM Models** (User, Student, Teacher, Principal, Parent, School) | ✅ Complete |
+| **Backend API** (FastAPI + Uvicorn) | ✅ **52 routes across 11 modules** |
+| **ORM Models** (29 of 29 tables mapped) | ✅ Complete |
 | **Authentication** (Supabase JWT + JWKS) | ✅ Login, /me, role-based access |
-| **School Context Middleware** (request.state population) | ✅ Complete |
+| **School Context Middleware** | ✅ Complete |
 | **Database Connection** (SQLAlchemy 2.0 Async + asyncpg) | ✅ Connected |
 | **Migrations** (Alembic async) | ✅ Stamped at head |
-| **Background Jobs** (Celery + Redis) | 📋 Configured |
-| **AI Services** (OpenAI / Anthropic) | 📋 Configured |
-| **Business APIs** (Attendance, Homework, Tests, Reports) | 📋 Phase 2 |
+| **Timetable Module** (4 endpoints) | ✅ Complete |
+| **Attendance Module** (5 endpoints) | ✅ Complete |
+| **Homework Module** (6 endpoints) | ✅ Complete |
+| **Tests Module** (6 endpoints) | ✅ Complete |
+| **Notifications Module** (5 endpoints) | ✅ Complete |
+| **Announcements Module** (5 endpoints) | ✅ Complete |
+| **Reports Module** (6 endpoints) | ✅ Complete |
+| **Dashboard Module** (4 endpoints) | ✅ Complete |
+| **Parent Portal** (6 endpoints) | ✅ Complete |
+| **Background Jobs** (Celery + Redis) | 📋 Stubs only |
+| **AI Services** (OpenAI / Anthropic) | 📋 Stubs only |
 
 ---
 
@@ -226,12 +237,20 @@ athon-tech/
 | 4 | FastAPI bootstrap (CORS, middleware, lifespan) | ✅ Complete |
 | 5 | Database connection (async engine, health check) | ✅ Complete |
 | 6 | Alembic migrations (async, stamped at head) | ✅ Complete |
-| 7 | ORM models (User, Student, Teacher, Principal, Parent, School) | ✅ Complete |
+| 7 | ORM models (26 of 29 tables) | ✅ Complete |
 | 8A | Auth service (JWT verification via JWKS) | ✅ Complete |
 | 8B | Login endpoint (Supabase Auth delegation) | ✅ Complete |
 | 8C | User provisioning (6 test users, DB sync) | ✅ Complete |
 | 9 | School context middleware (get_current_context) | ✅ Complete |
-| 10+ | Business APIs (Attendance, Homework, Tests, Reports) | 📋 Phase 2 |
+| 10 | Timetable module | ✅ Complete |
+| 11 | Attendance module | ✅ Complete |
+| 12 | Homework module | ✅ Complete |
+| 13 | Tests module | ✅ Complete |
+| 14 | Notifications module | ✅ Complete |
+| 15 | Announcements module | ✅ Complete |
+| 16 | Reports module | ✅ Complete |
+| 17 | Dashboard module | ✅ Complete |
+| 18 | Phase 2 audit & report | ✅ Complete |
 
 ---
 
@@ -250,9 +269,10 @@ athon-tech/
 
 | For | Document | Covers |
 |---|---|---|
-| **Full Report** | [`report.md`](report.md) | Complete project report for ChatGPT review |
+| **Full Report (Frontend Planning)** | [`report.md`](report.md) | Complete backend + database reference for frontend build discussion |
 | **Database Schema** | [`docs/database/database.md`](docs/database/database.md) | 29 tables, 11 ENUMs, 76 FKs, ERD, RLS, triggers |
 | **Backend Architecture** | [`docs/backend/backend.md`](docs/backend/backend.md) | Architecture, API design, auth flow, all layers |
+| **Production Hardening** | [`production_hardening.md`](production_hardening.md) | Security audit, pagination audit, test plan, readiness score |
 
 ---
 

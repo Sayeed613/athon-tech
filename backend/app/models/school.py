@@ -60,5 +60,27 @@ class School(TimestampMixin, SoftDeleteMixin, Base):
     parents = relationship("Parent", back_populates="school")
     students = relationship("Student", back_populates="school")
 
+    # Academic structure
+    academic_years = relationship("AcademicYear", back_populates="school")
+    academic_terms = relationship("AcademicTerm", back_populates="school")
+    classes = relationship("Class", back_populates="school")
+    subjects = relationship("Subject", back_populates="school")
+    periods = relationship("Period", back_populates="school")
+    class_enrollments = relationship("ClassEnrollment", back_populates="school")
+    teacher_class_subjects = relationship("TeacherClassSubject", back_populates="school")
+    timetable_entries = relationship("TimetableEntry", back_populates="school")
+    attendance_records = relationship("Attendance", back_populates="school")
+    homeworks = relationship("Homework", back_populates="school")
+    homework_submissions = relationship("HomeworkSubmission", back_populates="school")
+    tests = relationship("Test", back_populates="school")
+    test_attempts = relationship("TestAttempt", back_populates="school")
+    notifications = relationship("Notification", back_populates="school")
+    announcements = relationship("Announcement", back_populates="school")
+
+    # Enrichment
+    student_parents = relationship("StudentParent", back_populates="school")
+    audit_logs = relationship("AuditLog", back_populates="school")
+    ai_generations = relationship("AiGeneration", back_populates="school")
+
     def __repr__(self) -> str:
         return f"<School {self.code}: {self.name}>"

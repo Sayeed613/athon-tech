@@ -53,5 +53,13 @@ class Teacher(TimestampMixin, SoftDeleteMixin, Base):
     user = relationship("User", back_populates="teacher")
     school = relationship("School", back_populates="teachers")
 
+    # Academic assignments
+    teacher_class_subjects = relationship("TeacherClassSubject", back_populates="teacher")
+    timetable_entries = relationship("TimetableEntry", back_populates="teacher")
+    class_teacher_of = relationship("Class", back_populates="class_teacher")
+    marked_attendance = relationship("Attendance", back_populates="marker")
+    homeworks = relationship("Homework", back_populates="teacher")
+    tests = relationship("Test", back_populates="teacher")
+
     def __repr__(self) -> str:
         return f"<Teacher {self.employee_code}>"
