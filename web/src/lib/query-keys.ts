@@ -64,6 +64,8 @@ export const queryKeys = {
   dashboard: {
     admin: ["dashboard", "admin"] as const,
     principal: ["dashboard", "principal"] as const,
+    teacher: ["dashboard", "teacher"] as const,
+    student: ["dashboard", "student"] as const,
   },
   reports: {
     attendance: (params?: Record<string, unknown>) => ["reports", "attendance", params] as const,

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { useUserRole } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { ContentContainer } from "@/components/layout/content-container";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ import { cn } from "@/lib/utils";
 export default function AttendancePage() {
   const router = useRouter();
   const role = useUserRole();
+  const { toast } = useToast();
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [selectedClassId, setSelectedClassId] = useState("all");
   const canMark = role.isTeacher;
@@ -252,7 +254,13 @@ export default function AttendancePage() {
             </Card>
           )}
           <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {
-            if (classes.length > 0) router.push(`/attendance/class/${classes[0].id}`);
+            if (selectedClassId !== "all") {
+              router.push(`/attendance/class/${selectedClassId}`);
+            } else if (classes.length > 0) {
+              router.push(`/attendance/class/${classes[0].id}`);
+            } else {
+              toast({ title: "Select a class", description: "Please select a class first to view attendance.", variant: "destructive" });
+            }
           }}>
             <CardContent className="p-6 flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">

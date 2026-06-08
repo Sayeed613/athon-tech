@@ -85,13 +85,7 @@ export default function LoginPage() {
                 type="password"
               />
 
-              {/* Field-level validation errors */}
-              {form.formState.errors.email && (
-                <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
-              )}
-              {form.formState.errors.password && (
-                <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>
-              )}
+              {/* Field-level validation errors are handled by FormInput */}
 
               {loginError && (
                 <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">

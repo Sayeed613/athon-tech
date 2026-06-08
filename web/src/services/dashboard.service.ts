@@ -118,6 +118,30 @@ export const dashboardService = {
     }
   },
 
+  /** GET /dashboard/teacher — teacher dashboard */
+  async getTeacherDashboard(): Promise<import("@/types/dashboard").TeacherDashboardResponse> {
+    const { data } = await http.get<import("@/types/dashboard").TeacherDashboardResponse>(
+      API_ENDPOINTS.DASHBOARD.TEACHER
+    );
+    return data;
+  },
+
+  /** GET /dashboard/principal — principal dashboard */
+  async getPrincipalDashboard(): Promise<import("@/types/dashboard").PrincipalDashboardResponse> {
+    const { data } = await http.get<import("@/types/dashboard").PrincipalDashboardResponse>(
+      API_ENDPOINTS.DASHBOARD.PRINCIPAL
+    );
+    return data;
+  },
+
+  /** GET /dashboard/student — student dashboard */
+  async getStudentDashboard(): Promise<import("@/types/dashboard").StudentDashboardResponse> {
+    const { data } = await http.get<import("@/types/dashboard").StudentDashboardResponse>(
+      API_ENDPOINTS.DASHBOARD.STUDENT
+    );
+    return data;
+  },
+
   /**
    * Compose all dashboard data for the admin view.
    * Runs queries in parallel for minimal loading time.

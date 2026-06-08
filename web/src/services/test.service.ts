@@ -54,4 +54,28 @@ export const testService = {
     );
     return data;
   },
+
+  /** GET /tests/{id}/questions — get test questions for student */
+  async getQuestions(testId: string): Promise<import("@/types/test").StudentTestQuestion[]> {
+    const { data } = await http.get<import("@/types/test").StudentTestQuestion[]>(
+      `/tests/${testId}/questions`
+    );
+    return data;
+  },
+
+  /** POST /tests/{id}/start — start a test attempt */
+  async startTest(testId: string): Promise<TestAttempt> {
+    const { data } = await http.post<TestAttempt>(
+      `/tests/${testId}/start`
+    );
+    return data;
+  },
+
+  /** POST /tests/{id}/submit — submit a test attempt */
+  async submitTest(testId: string): Promise<TestAttempt> {
+    const { data } = await http.post<TestAttempt>(
+      `/tests/${testId}/submit`
+    );
+    return data;
+  },
 };

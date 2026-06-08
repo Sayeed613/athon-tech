@@ -621,6 +621,49 @@ async def grade_submission(
     return _build_submission_response(updated)
 
 
+# ── Student My Submission ───────────────────────────────────────
+
+
+@router.get(
+    "/homework/{homework_id}/my-submission",
+    response_model=SubmissionResponse | None,
+)
+async def get_my_submission(
+    homework_id: str,
+    current_user: User = Depends(require_role("student")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the authenticated student's submission for a homework.
+
+    Returns the submission record if it exists, or ``null`` if
+    the student has not submitted yet. Submission includes
+    status, score (if graded), teacher remarks, and timestamps.
+    """
+    student_id, _ = await _get_student_id_and_class(db, current_user)
+    school_id = str(current_user.school_id)
+
+    # Verify homework exists and is in the student's school
+    homework_repo = HomeworkRepository(db)
+    hw = await homework_repo.get(homework_id)
+    if hw is None or str(hw.school_id) != school_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Homework not found",
+        )
+
+    # Look up the student's submission
+    sub_repo = HomeworkSubmissionRepository(db)
+    sub = await sub_repo.get_by_student_and_homework(
+        student_id=student_id,
+        homework_id=homework_id,
+    )
+
+    if sub is None:
+        return None
+
+    return _build_submission_response(sub)
+
+
 # ── Phase D: Student Question Access ────────────────────────────
 
 
@@ -667,7 +710,7 @@ async def get_homework_questions(
 
     questions = []
     if hw_with_q and hasattr(hw_with_q, "questions") and hw_with_q.questions:
-        for q in hw_full.questions:
+        for q in hw_with_q.questions:
             questions.append(
                 StudentHomeworkQuestionResponse(
                     id=str(q.id),

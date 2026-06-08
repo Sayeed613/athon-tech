@@ -594,7 +594,7 @@ async def get_test_questions(
 
     questions = []
     if test_with_q and hasattr(test_with_q, "questions") and test_with_q.questions:
-        for q in test_full.questions:
+        for q in test_with_q.questions:
             questions.append(
                 StudentTestQuestionResponse(
                     id=str(q.id),

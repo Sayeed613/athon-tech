@@ -15,7 +15,7 @@ import {
   Users,
   Search,
   Download,
-  Filter,
+  Clock,
 } from "lucide-react";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { useUserRole } from "@/hooks/use-auth";
@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { queryKeys } from "@/lib/query-keys";
 import { homeworkService } from "@/services/homework.service";
 import { classService } from "@/services/class.service";
@@ -46,32 +45,54 @@ export default function HomeworkPage() {
   const [selectedClassId, setSelectedClassId] = useState("all");
   const [search, setSearch] = useState("");
 
+  const isStudentView = role.isStudent;
+  const isParentView = role.isParent;
+  const isTeacherOrAdmin = role.isTeacher || role.isAdmin || role.isPrincipal;
+
   const { data: classesData } = useQuery({
     queryKey: queryKeys.classes.list({ limit: 200 }),
     queryFn: () => classService.list({ limit: 200 }),
     staleTime: 60_000,
+    enabled: !isStudentView, // Students don't need class selector
   });
   const classes = classesData?.classes ?? [];
 
-  // Fetch homework for selected class
-  const homeworkQuery = useQuery({
-    queryKey: queryKeys.homework.byClass(selectedClassId),
-    queryFn: () => homeworkService.getByClass(selectedClassId, { include_unpublished: true }),
-    enabled: selectedClassId !== "all",
+  // Students use their own endpoint; teachers/admins use class selector
+  const studentHomeworkQuery = useQuery({
+    queryKey: queryKeys.homework.all,
+    queryFn: () => homeworkService.getMyHomework(),
+    enabled: isStudentView,
     staleTime: 30_000,
   });
 
-  const allHomeworks = homeworkQuery.data?.homeworks ?? [];
-  const isLoading = selectedClassId !== "all" && homeworkQuery.isLoading;
-  const isError = selectedClassId !== "all" && homeworkQuery.isError;
+  const homeworkQuery = useQuery({
+    queryKey: queryKeys.homework.byClass(selectedClassId),
+    queryFn: () => homeworkService.getByClass(selectedClassId, {
+      include_unpublished: isTeacherOrAdmin, // Only teachers/admins see drafts
+    }),
+    enabled: selectedClassId !== "all" && !isStudentView,
+    staleTime: 30_000,
+  });
+
+  const allHomeworks = isStudentView
+    ? (studentHomeworkQuery.data?.homeworks ?? [])
+    : (homeworkQuery.data?.homeworks ?? []);
+
+  const isLoading = isStudentView
+    ? studentHomeworkQuery.isLoading
+    : (selectedClassId !== "all" && homeworkQuery.isLoading);
+
+  const isError = isStudentView
+    ? studentHomeworkQuery.isError
+    : (selectedClassId !== "all" && homeworkQuery.isError);
 
   // If no class selected, auto-select first available class
   const fallbackClassId = classes.length > 0 ? classes[0].id : "";
   useEffect(() => {
-    if (selectedClassId === "all" && fallbackClassId) {
+    if (selectedClassId === "all" && fallbackClassId && !isStudentView) {
       setSelectedClassId(fallbackClassId);
     }
-  }, [selectedClassId, fallbackClassId]);
+  }, [selectedClassId, fallbackClassId, isStudentView]);
 
   const filtered = useMemo(() => {
     if (!search) return allHomeworks;
@@ -111,8 +132,8 @@ export default function HomeworkPage() {
     <AdminLayout>
       <ContentContainer>
         <PageHeader
-          title="Homework"
-          description="Create and manage homework assignments."
+          title={isStudentView ? "My Homework" : "Homework"}
+          description={isStudentView ? "View and submit your homework assignments." : "Create and manage homework assignments."}
         >
           {role.isTeacher && (
             <Button onClick={() => router.push("/homework/create")} size="sm" className="gap-2">
@@ -121,7 +142,7 @@ export default function HomeworkPage() {
           )}
         </PageHeader>
 
-        {/* Filters */}
+        {/* Filters — only show class selector for non-students */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -132,25 +153,29 @@ export default function HomeworkPage() {
               className="flex h-9 w-full rounded-md border border-input bg-transparent pl-8 pr-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
-          <Select value={selectedClassId} onValueChange={(v: string | null) => v && setSelectedClassId(v)}>
-            <SelectTrigger className="h-9 w-48">
-              <SelectValue placeholder="Select class" />
-            </SelectTrigger>
-            <SelectContent>
-              {classes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}{c.section ? ` - ${c.section}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportCSV} disabled={filtered.length === 0}>
-            <Download className="h-3.5 w-3.5" /> Export
-          </Button>
+          {!isStudentView && (
+            <>
+              <Select value={selectedClassId} onValueChange={(v: string | null) => v && setSelectedClassId(v)}>
+                <SelectTrigger className="h-9 w-48">
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}{c.section ? ` - ${c.section}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportCSV} disabled={filtered.length === 0}>
+                <Download className="h-3.5 w-3.5" /> Export
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Summary Cards */}
-        {!isLoading && !isError && allHomeworks.length > 0 && (
+        {!isLoading && !isError && allHomeworks.length > 0 && !isStudentView && (
           <div className="mt-6 grid grid-cols-3 gap-4">
             <Card>
               <CardContent className="p-4 flex items-center gap-3">
@@ -196,7 +221,7 @@ export default function HomeworkPage() {
           <div className="mt-6 flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm">
             <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
             <p className="flex-1 text-destructive">Failed to load homework.</p>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => homeworkQuery.refetch()}>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => isStudentView ? studentHomeworkQuery.refetch() : homeworkQuery.refetch()}>
               <RefreshCw className="h-3.5 w-3.5" /> Retry
             </Button>
           </div>
@@ -206,9 +231,9 @@ export default function HomeworkPage() {
         {!isLoading && !isError && filtered.length === 0 && (
           <EmptyState
             variant="no-data"
-            title="No homework"
-            description={search ? "No homework matches your search." : "No homework assigned to this class yet."}
-            action={role.isTeacher ? { label: "Create Homework", onClick: () => router.push("/homework/create") } : undefined}
+            title={isStudentView ? "No homework assigned" : "No homework"}
+            description={search ? "No homework matches your search." : isStudentView ? "You don't have any pending homework." : "No homework assigned to this class yet."}
+            action={role.isTeacher && !isStudentView ? { label: "Create Homework", onClick: () => router.push("/homework/create") } : undefined}
           />
         )}
 
@@ -234,8 +259,12 @@ export default function HomeworkPage() {
                           {hw.subject?.name ?? "—"}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{hw.class_?.name ?? "—"}</span>
-                        <span className="text-xs text-muted-foreground">·</span>
-                        <span className="text-xs text-muted-foreground">{hw.teacher?.name ?? "—"}</span>
+                        {!isStudentView && (
+                          <>
+                            <span className="text-xs text-muted-foreground">·</span>
+                            <span className="text-xs text-muted-foreground">{hw.teacher?.name ?? "—"}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -246,17 +275,23 @@ export default function HomeworkPage() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">{hw.max_score} pts</p>
                     </div>
-                    <Badge variant={status.variant} className="capitalize">{status.label}</Badge>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); router.push(`/homework/${hw.id}`); }}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {role.isTeacher && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); router.push(`/homework/${hw.id}/edit`); }}>
-                          <Pencil className="h-4 w-4" />
+                    {isStudentView ? (
+                      <Badge variant={status.variant} className="capitalize">{status.label}</Badge>
+                    ) : (
+                      <Badge variant={status.variant} className="capitalize">{status.label}</Badge>
+                    )}
+                    {!isStudentView && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); router.push(`/homework/${hw.id}`); }}>
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      )}
-                    </div>
+                        {role.isTeacher && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); router.push(`/homework/${hw.id}/edit`); }}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

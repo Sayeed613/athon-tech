@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
@@ -34,6 +34,7 @@ import { homeworkService } from "@/services/homework.service";
 import { classService } from "@/services/class.service";
 import { subjectService } from "@/services/subject.service";
 import { academicService } from "@/services/academic.service";
+import { assignmentService } from "@/services/assignment.service";
 import type { CreateHomeworkRequest } from "@/types/homework";
 
 export default function CreateHomeworkPage() {
@@ -81,8 +82,27 @@ export default function CreateHomeworkPage() {
   const terms = termsData?.academic_terms ?? [];
   const currentTermId = terms.find((t) => t.is_current)?.id ?? terms[0]?.id ?? "";
 
+  // Fetch assignments for selected class to filter subjects
+  const { data: assignmentsData } = useQuery({
+    queryKey: queryKeys.assignments.list({ class_id: form.class_id }),
+    queryFn: () => assignmentService.list({ class_id: form.class_id }),
+    enabled: !!form.class_id,
+    staleTime: 30_000,
+  });
+
   // Filter subjects by selected class's assigned subjects
-  const filteredSubjects = subjects;
+  const filteredSubjects = useMemo(() => {
+    if (!form.class_id || !assignmentsData?.assignments) return subjects;
+    const subjectIdsInClass = new Set(assignmentsData.assignments.map((a) => a.subject_id));
+    if (subjectIdsInClass.size === 0) return subjects;
+    return subjects.filter((s) => subjectIdsInClass.has(s.id));
+  }, [subjects, assignmentsData, form.class_id]);
+
+  // Reset subject when class changes
+  const handleClassChange = (v: string) => {
+    set("class_id", v);
+    set("subject_id", "");
+  };
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateHomeworkRequest) => homeworkService.create(payload),
@@ -149,7 +169,7 @@ export default function CreateHomeworkPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Class <span className="text-destructive">*</span></Label>
-                  <Select value={form.class_id} onValueChange={(v) => set("class_id", v)}>
+                  <Select value={form.class_id} onValueChange={(v) => handleClassChange(v)}>
                     <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
                     <SelectContent>
                       {classes.map((c) => (

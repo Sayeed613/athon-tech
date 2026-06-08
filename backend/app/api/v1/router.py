@@ -28,6 +28,7 @@ from app.api.v1.academic_terms import router as academic_term_router
 from app.api.v1.periods import router as period_router
 from app.api.v1.teacher_assignments import router as teacher_assignment_router
 from app.api.v1.schools import router as school_router
+from app.api.v1.ai import router as ai_router
 
 router = APIRouter()
 
@@ -53,3 +54,4 @@ router.include_router(academic_term_router)
 router.include_router(period_router)
 router.include_router(teacher_assignment_router)
 router.include_router(school_router)
+router.include_router(ai_router)

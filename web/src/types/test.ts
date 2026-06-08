@@ -107,3 +107,15 @@ export interface GradeAttemptRequest {
   total_score_manual?: number;
   teacher_remarks?: string;
 }
+
+// ── Student Test Questions (correct_answer hidden) ────────────
+
+export interface StudentTestQuestion {
+  id: string;
+  question_number: number;
+  question_type: string;
+  question_text: string;
+  options: string[] | null;
+  max_points: number;
+}
+

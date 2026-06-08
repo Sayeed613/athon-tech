@@ -1,6 +1,7 @@
 
 Login credentials:
-- Email:  admin@athondemo.edu
+- Email:
+
 - Password:  Athon2025!
 > Note: The first page load may take 30–60s for Turbopack to compile. Subsequent navigation will be fast.
 Other accounts available (email / password is always  Athon2025! ):

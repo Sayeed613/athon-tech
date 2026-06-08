@@ -45,24 +45,29 @@ export default function TestsPage() {
   const [selectedClassId, setSelectedClassId] = useState("all");
   const [search, setSearch] = useState("");
 
+  const isStudentView = role.isStudent;
+
   const { data: classesData } = useQuery({
     queryKey: queryKeys.classes.list({ limit: 200 }),
     queryFn: () => classService.list({ limit: 200 }),
     staleTime: 60_000,
+    enabled: !isStudentView, // Students don't need class selector
   });
   const classes = classesData?.classes ?? [];
 
   const fallbackClassId = classes.length > 0 ? classes[0].id : "";
   useEffect(() => {
-    if (selectedClassId === "all" && fallbackClassId) {
+    if (selectedClassId === "all" && fallbackClassId && !isStudentView) {
       setSelectedClassId(fallbackClassId);
     }
-  }, [selectedClassId, fallbackClassId]);
+  }, [selectedClassId, fallbackClassId, isStudentView]);
 
   const testsQuery = useQuery({
     queryKey: queryKeys.tests.byClass(selectedClassId),
-    queryFn: () => testService.getByClass(selectedClassId, { include_unpublished: true }),
-    enabled: selectedClassId !== "all",
+    queryFn: () => testService.getByClass(selectedClassId, {
+      include_unpublished: role.isTeacher || role.isAdmin || role.isPrincipal
+    }),
+    enabled: selectedClassId !== "all" && !isStudentView,
     staleTime: 30_000,
   });
 
@@ -107,8 +112,8 @@ export default function TestsPage() {
     <AdminLayout>
       <ContentContainer>
         <PageHeader
-          title="Tests"
-          description="Create and manage tests and exams."
+          title={isStudentView ? "My Tests" : "Tests"}
+          description={isStudentView ? "View and attempt your tests." : "Create and manage tests and exams."}
         >
           {role.isTeacher && (
             <Button onClick={() => router.push("/tests/create")} size="sm" className="gap-2">
@@ -127,18 +132,20 @@ export default function TestsPage() {
               className="flex h-9 w-full rounded-md border border-input bg-transparent pl-8 pr-3 py-1 text-sm shadow-sm"
             />
           </div>
-          <Select value={selectedClassId} onValueChange={(v: string | null) => v && setSelectedClassId(v)}>
-            <SelectTrigger className="h-9 w-48">
-              <SelectValue placeholder="Select class" />
-            </SelectTrigger>
-            <SelectContent>
-              {classes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}{c.section ? ` - ${c.section}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!isStudentView && (
+            <Select value={selectedClassId} onValueChange={(v: string | null) => v && setSelectedClassId(v)}>
+              <SelectTrigger className="h-9 w-48">
+                <SelectValue placeholder="Select class" />
+              </SelectTrigger>
+              <SelectContent>
+                {classes.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}{c.section ? ` - ${c.section}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportCSV} disabled={filtered.length === 0}>
             <Download className="h-3.5 w-3.5" /> Export
           </Button>
@@ -195,14 +202,12 @@ export default function TestsPage() {
               <RefreshCw className="h-3.5 w-3.5" /> Retry
             </Button>
           </div>
-        )}
-
-        {!isLoading && !isError && filtered.length === 0 && (
+        )}          {!isLoading && !isError && filtered.length === 0 && (
           <EmptyState
             variant="no-data"
-            title="No tests"
-            description={search ? "No tests match your search." : "No tests for this class yet."}
-            action={role.isTeacher ? { label: "Create Test", onClick: () => router.push("/tests/create") } : undefined}
+            title={isStudentView ? "No tests assigned" : "No tests"}
+            description={search ? "No tests match your search." : isStudentView ? "You don't have any upcoming tests." : "No tests for this class yet."}
+            action={role.isTeacher && !isStudentView ? { label: "Create Test", onClick: () => router.push("/tests/create") } : undefined}
           />
         )}
 

@@ -2,6 +2,20 @@
 
 import type { TimestampedEntity } from "./index";
 
+// ── Shared Widgets ────────────────────────────────────────────
+
+export interface AnnouncementItem {
+  id: string;
+  title: string;
+  body: string | null;
+  priority: string;
+  created_at: string;
+}
+
+export interface UnreadCountWidget {
+  count: number;
+}
+
 // ── Admin Dashboard API Response ──────────────────────────────
 
 export interface AdminDashboardResponse {
@@ -10,15 +24,65 @@ export interface AdminDashboardResponse {
   active_classes: number;
   attendance_percentage: number;
   recent_announcements: AnnouncementItem[];
-  unread_notifications: { count: number };
+  unread_notifications: UnreadCountWidget;
 }
 
-export interface AnnouncementItem {
+// ── Principal Dashboard Response ──────────────────────────────
+
+export interface PrincipalDashboardResponse {
+  total_students: number;
+  total_teachers: number;
+  attendance_percentage: number;
+  homework_completion_rate: number;
+  test_pass_rate: number;
+  recent_announcements: AnnouncementItem[];
+  unread_notifications: UnreadCountWidget;
+}
+
+// ── Teacher Dashboard Response ────────────────────────────────
+
+export interface TimetableWidget {
+  subject_name: string;
+  class_name: string;
+  start_time: string;
+  end_time: string;
+  room_number: string | null;
+}
+
+export interface TeacherDashboardResponse {
+  classes_assigned: string[];
+  today_schedule: TimetableWidget[];
+  attendance_pending_count: number;
+  homework_pending_review: number;
+  upcoming_tests: number;
+  unread_notifications: UnreadCountWidget;
+}
+
+// ── Student Dashboard Response ────────────────────────────────
+
+export interface HomeworkDueWidget {
   id: string;
   title: string;
-  body: string | null;
-  priority: string;
-  created_at: string;
+  subject_name: string;
+  due_date: string;
+  days_remaining: number;
+}
+
+export interface UpcomingTestWidget {
+  id: string;
+  title: string;
+  subject_name: string;
+  scheduled_at: string | null;
+  total_marks: number;
+}
+
+export interface StudentDashboardResponse {
+  today_timetable: TimetableWidget[];
+  homework_due: HomeworkDueWidget[];
+  upcoming_tests: UpcomingTestWidget[];
+  attendance_percentage: number;
+  recent_announcements: AnnouncementItem[];
+  unread_notifications: UnreadCountWidget;
 }
 
 // ── School Profile ────────────────────────────────────────────
@@ -116,4 +180,16 @@ export interface DashboardState {
   isLoading: boolean;
   isError: boolean;
   error: string | null;
+}
+
+// ── Homework Question Types (for AI generation) ───────────────
+
+export interface AIQuestion {
+  question_number: number;
+  question_type: string;
+  question_text: string;
+  options: string[] | null;
+  correct_answer: string;
+  explanation: string;
+  max_points: number;
 }

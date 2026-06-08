@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { useUserRole } from "@/hooks/use-auth";
+import { useAuthStore } from "@/hooks/use-auth-store";
+import { timetableService } from "@/services/timetable.service";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { ContentContainer } from "@/components/layout/content-container";
 import { PageHeader } from "@/components/layout/page-header";
@@ -45,6 +47,25 @@ import { studentService } from "@/services/student.service";
 import { academicService } from "@/services/academic.service";
 import { cn } from "@/lib/utils";
 import type { BatchAttendanceItem } from "@/types/attendance";
+
+// ── Mobile-friendly tap-to-cycle status implementation ─────────
+
+const STATUS_CYCLE = ['present', 'absent', 'late', 'half_day'] as const;
+
+type CycleStatus = typeof STATUS_CYCLE[number];
+
+const STATUS_CONFIG: Record<CycleStatus, { label: string; fullLabel: string; className: string }> = {
+  present: { label: 'P', fullLabel: 'Present', className: 'bg-green-100 text-green-700 border-green-300' },
+  absent:  { label: 'A', fullLabel: 'Absent',  className: 'bg-red-100 text-red-700 border-red-300' },
+  late:    { label: 'L', fullLabel: 'Late',    className: 'bg-amber-100 text-amber-700 border-amber-300' },
+  half_day:{ label: 'H', fullLabel: 'Half Day',className: 'bg-orange-100 text-orange-700 border-orange-300' },
+};
+
+function cycleStatus(current: string): string {
+  const idx = STATUS_CYCLE.indexOf(current as CycleStatus);
+  if (idx === -1 || idx === STATUS_CYCLE.length - 1) return STATUS_CYCLE[0];
+  return STATUS_CYCLE[idx + 1];
+}
 
 const STATUS_OPTIONS = [
   { value: "present", label: "Present", color: "text-green-600 bg-green-50" },
@@ -81,6 +102,15 @@ export default function MarkAttendancePage() {
     staleTime: 60_000,
   });
 
+  // For teachers: fetch timetable to get assigned classes
+  const user = useAuthStore((s) => s.user);
+  const { data: timetableData } = useQuery({
+    queryKey: queryKeys.timetable.byTeacher(user?.id ?? ''),
+    queryFn: () => timetableService.getByTeacher(user?.id ?? ''),
+    enabled: role.isTeacher && !!user?.id,
+    staleTime: 60_000,
+  });
+
   const { data: termsData } = useQuery({
     queryKey: queryKeys.academicTerms.list(),
     queryFn: () => academicService.listTerms(),
@@ -88,6 +118,17 @@ export default function MarkAttendancePage() {
   });
 
   const classes = classesData?.classes ?? [];
+
+  // Filter to teacher's assigned classes based on timetable
+  const assignedClassIds = useMemo(() => {
+    if (!role.isTeacher || !timetableData?.entries) return null;
+    return new Set(timetableData.entries.map((e: { class_id: string }) => e.class_id));
+  }, [role.isTeacher, timetableData]);
+
+  const visibleClasses = useMemo(() => {
+    if (!assignedClassIds) return classes; // admin sees all
+    return classes.filter((c) => assignedClassIds.has(c.id));
+  }, [classes, assignedClassIds]);
   const terms = termsData?.academic_terms ?? [];
   const currentTermId = terms.find((t) => t.is_current)?.id ?? terms[0]?.id ?? "";
 
@@ -176,7 +217,7 @@ export default function MarkAttendancePage() {
                 <SelectValue placeholder="Select class..." />
               </SelectTrigger>
               <SelectContent>
-                {classes.map((c) => (
+                {visibleClasses.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}{c.section ? ` - ${c.section}` : ""}
                   </SelectItem>
@@ -250,49 +291,64 @@ export default function MarkAttendancePage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {STATUS_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt.value}
-                      variant={studentStatuses[student.id] === opt.value ? "default" : "outline"}
-                      size="sm"
-                      className={cn(
-                        "h-8 min-w-[72px] text-xs",
-                        studentStatuses[student.id] === opt.value ? "" : "text-muted-foreground"
-                      )}
-                      onClick={() => setStudentStatus(student.id, opt.value)}
-                    >
-                      {studentStatuses[student.id] === opt.value && opt.value === "present" && <Check className="h-3 w-3 mr-1" />}
-                      {studentStatuses[student.id] === opt.value && opt.value === "absent" && <X className="h-3 w-3 mr-1" />}
-                      {opt.label === "Half Day" ? "Half" : opt.label}
-                    </Button>
-                  ))}
-                </div>
+                {/* Mobile-friendly tap-to-cycle status badge */}
+                <button
+                  onClick={() => setStudentStatus(student.id, cycleStatus(studentStatuses[student.id] ?? 'present'))}
+                  className={cn(
+                    "flex h-10 w-20 shrink-0 items-center justify-center rounded-lg border-2 text-sm font-bold transition-all touch-manipulation select-none",
+                    STATUS_CONFIG[(studentStatuses[student.id] ?? 'present') as CycleStatus]?.className ?? ''
+                  )}
+                >
+                  {STATUS_CONFIG[(studentStatuses[student.id] ?? 'present') as CycleStatus]?.fullLabel ?? 'Present'}
+                </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Submit */}
+        {/* Summary & Submit */}
         {students.length > 0 && (
-          <div className="mt-6 flex items-center justify-between rounded-lg border bg-muted/20 p-4">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{pendingCount}</span> students ready to mark
-              {selectedClass && <span> for <strong>{selectedClass.name}</strong></span>}
-            </p>
-            <Button
-              onClick={() => setShowConfirm(true)}
-              disabled={batchMutation.isPending || pendingCount === 0}
-              className="gap-2"
-            >
-              {batchMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {batchMutation.isPending ? "Saving..." : `Save Attendance (${pendingCount})`}
-            </Button>
-          </div>
+          <>
+            {/* Summary bar */}
+            <div className="mt-6 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/10 px-4 py-3 text-sm">
+              <span className="font-medium text-muted-foreground mr-1">Summary:</span>
+              <span className="font-semibold text-green-600">
+                {Object.values(studentStatuses).filter((s) => s === "present").length} P
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-semibold text-red-600">
+                {Object.values(studentStatuses).filter((s) => s === "absent").length} A
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-semibold text-amber-600">
+                {Object.values(studentStatuses).filter((s) => s === "late").length} L
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-semibold text-orange-600">
+                {Object.values(studentStatuses).filter((s) => s === "half_day").length} H
+              </span>
+            </div>
+
+            {/* Submit */}
+            <div className="mt-4 flex items-center justify-between rounded-lg border bg-muted/20 p-4">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">{pendingCount}</span> students ready to mark
+                {selectedClass && <span> for <strong>{selectedClass.name}</strong></span>}
+              </p>
+              <Button
+                onClick={() => setShowConfirm(true)}
+                disabled={batchMutation.isPending || pendingCount === 0}
+                className="gap-2"
+              >
+                {batchMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {batchMutation.isPending ? "Saving..." : `Save Attendance (${pendingCount})`}
+              </Button>
+            </div>
+          </>
         )}
 
         {/* Confirm Dialog */}

@@ -55,6 +55,53 @@ export const homeworkService = {
     return data;
   },
 
+  /** GET /homework/student/me — get my homework (student role) */
+  async getMyHomework(): Promise<HomeworkListResponse> {
+    const { data } = await http.get<HomeworkListResponse>(
+      "/homework/student/me"
+    );
+    return data;
+  },
+
+  /** GET /homework/{id}/my-submission — get the student's submission for a homework */
+  async getMySubmission(homeworkId: string): Promise<HomeworkSubmission | null> {
+    const { data } = await http.get<HomeworkSubmission | null>(
+      `/homework/${homeworkId}/my-submission`
+    );
+    return data;
+  },
+
+  /** GET /homework/{id}/questions — get questions for a homework */
+  async getQuestions(homeworkId: string): Promise<import("@/types/dashboard").AIQuestion[]> {
+    const { data } = await http.get<import("@/types/dashboard").AIQuestion[]>(
+      `/homework/${homeworkId}/questions`
+    );
+    return data;
+  },
+
+  /** POST /homework/{id}/submit — submit homework */
+  async submitHomework(homeworkId: string): Promise<HomeworkSubmission> {
+    const { data } = await http.post<HomeworkSubmission>(
+      `/homework/${homeworkId}/submit`
+    );
+    return data;
+  },
+
+  /** POST /ai/generate-homework — generate AI homework questions */
+  async generateAI(payload: {
+    subject_name: string;
+    class_name: string;
+    chapter_topic: string;
+    question_count: number;
+    question_types: string[];
+  }): Promise<{ title: string; questions: import("@/types/dashboard").AIQuestion[] }> {
+    const { data } = await http.post<{ title: string; questions: import("@/types/dashboard").AIQuestion[] }>(
+      "/ai/generate-homework",
+      payload
+    );
+    return data;
+  },
+
   /** PATCH /homework/{id}/submissions/{submissionId}/grade — grade submission */
   async gradeSubmission(
     homeworkId: string,
