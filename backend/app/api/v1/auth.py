@@ -73,21 +73,29 @@ async def login(
     supabase_data = supabase_resp.json()
     supabase_user_id = supabase_data["user"]["id"]
 
-    # ── 2. Look up user in our database by supabase_user_id ───────
+    # ── 2. Look up user in our database by email ─────────────────
     result = await db.execute(
-        select(User).where(User.supabase_user_id == supabase_user_id),
+        select(User).where(User.email == body.email),
     )
     user = result.scalar_one_or_none()
 
     if not user:
         logger.warning(
-            "Supabase user %s authenticated but not found in Athon users table",
-            supabase_user_id,
+            "Supabase user %s (%s) authenticated but not found in Athon users table",
+            supabase_user_id, body.email,
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account not found",
         )
+
+    # Sync supabase_user_id if it changed (e.g. after re-seeding)
+    if user.supabase_user_id != supabase_user_id:
+        logger.info(
+            "Syncing supabase_user_id for %s: %s -> %s",
+            body.email, user.supabase_user_id, supabase_user_id,
+        )
+        user.supabase_user_id = supabase_user_id
 
     if not user.is_active:
         raise HTTPException(

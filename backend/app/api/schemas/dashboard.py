@@ -131,6 +131,27 @@ class StudentDashboardResponse(BaseModel):
     )
 
 
+# ── Parent Dashboard ────────────────────────────────────────────
+
+
+class ParentDashboardResponse(BaseModel):
+    """Aggregated parent dashboard view.
+
+    Shows school-wide attendance percentage, recent announcements,
+    and unread notification count. More child-specific data can
+    be added when parent-child linking is implemented.
+    """
+
+    attendance_percentage: float = Field(0.0, description="School-wide attendance %")
+    recent_announcements: list[AnnouncementWidget] = Field(
+        default_factory=list, description="Latest announcements"
+    )
+    unread_notifications: UnreadCountWidget = Field(
+        default_factory=lambda: UnreadCountWidget(count=0),
+        description="Unread notification count",
+    )
+
+
 # ── Admin Dashboard ──────────────────────────────────────────────
 
 
@@ -139,6 +160,7 @@ class AdminDashboardResponse(BaseModel):
 
     total_students: int = Field(0, description="Active student count")
     total_teachers: int = Field(0, description="Active teacher count")
+    total_parents: int = Field(0, description="Active parent count")
     active_classes: int = Field(0, description="Active class count")
     attendance_percentage: float = Field(0.0, description="School-wide attendance %")
     recent_announcements: list[AnnouncementWidget] = Field(

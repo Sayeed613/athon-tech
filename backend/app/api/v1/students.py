@@ -16,6 +16,7 @@ All data is school-scoped from the authenticated user's context.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_role
@@ -32,7 +33,7 @@ from app.api.schemas.students import (
 from app.core.database import get_db
 from app.domain.identity.student_service import StudentService
 from app.models.user import User
-from app.repository.class_enrollments import ClassEnrollmentRepository
+from app.repository.class_enrollment_repo import ClassEnrollmentRepository
 from app.repository.class_repo import ClassRepository
 from app.repository.students import StudentRepository
 from app.repository.users import UserRepository
@@ -43,6 +44,11 @@ router = APIRouter(tags=["students"])
 
 
 # ── Helper Functions ────────────────────────────────────────────
+
+
+def _is_loaded(instance, attr_name: str) -> bool:
+    """Check if a relationship attribute is loaded without triggering lazy load."""
+    return attr_name not in inspect(instance).unloaded
 
 
 def _build_student_response(student) -> StudentResponse:
@@ -76,7 +82,7 @@ def _build_student_response(student) -> StudentResponse:
     )
 
     # Attach parent info if loaded
-    if hasattr(student, "student_parents") and student.student_parents:
+    if _is_loaded(student, "student_parents") and student.student_parents:
         for sp in student.student_parents:
             parent = getattr(sp, "parent", None)
             parent_user = parent.user if parent and hasattr(parent, "user") else None
@@ -94,7 +100,7 @@ def _build_student_response(student) -> StudentResponse:
             )
 
     # Attach enrollment history if loaded
-    if hasattr(student, "class_enrollments") and student.class_enrollments:
+    if _is_loaded(student, "class_enrollments") and student.class_enrollments:
         for ce in student.class_enrollments:
             ce_class = getattr(ce, "class_", None)
             ce_year = ce_class.academic_year if ce_class and hasattr(ce_class, "academic_year") else None

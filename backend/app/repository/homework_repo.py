@@ -118,7 +118,11 @@ class HomeworkRepository(BaseRepository[Homework]):
             )
         )
         result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+        hw = result.scalar_one_or_none()
+        # Sort questions by sort_order so they're always returned in the correct order
+        if hw and hasattr(hw, "questions") and hw.questions:
+            hw.questions.sort(key=lambda q: q.sort_order or 0)
+        return hw
 
     async def get_published_for_student_class(
         self,

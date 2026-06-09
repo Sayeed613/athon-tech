@@ -78,15 +78,14 @@ class AttendanceService:
         """Return the set of class IDs a teacher is assigned to in a given term.
 
         Combines TeacherClassSubject assignments with class-teacher assignments.
+        Uses a filtered database query instead of fetching all records.
         """
-        # Get class IDs from teacher_class_subjects
-        assignments = await self._tcs_repo.get_multi()
-        # Filter in-memory since get_multi doesn't support arbitrary filters
-        class_ids = {
-            str(a.class_id) for a in assignments
-            if a.teacher_id and str(a.teacher_id) == teacher_id
-            and a.academic_term_id and str(a.academic_term_id) == academic_term_id
-        }
+        # Get class IDs from teacher_class_subjects (filtered at DB level)
+        assignments = await self._tcs_repo.get_by_teacher_and_term(
+            teacher_id=teacher_id,
+            academic_term_id=academic_term_id,
+        )
+        class_ids = {str(a.class_id) for a in assignments}
 
         # Also add classes where teacher is the class teacher
         from app.models.academic_class import Class

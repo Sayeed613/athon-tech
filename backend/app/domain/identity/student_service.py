@@ -18,7 +18,7 @@ from typing import Any
 from app.models.enums import UserRole
 from app.models.student import Student
 from app.repository.class_repo import ClassRepository
-from app.repository.class_enrollments import ClassEnrollmentRepository
+from app.repository.class_enrollment_repo import ClassEnrollmentRepository
 from app.repository.students import StudentRepository
 from app.repository.users import UserRepository
 from app.domain.identity.user_service import UserService

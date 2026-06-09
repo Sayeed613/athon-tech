@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user, require_role
 from app.api.schemas.dashboard import (
     AdminDashboardResponse,
+    ParentDashboardResponse,
     PrincipalDashboardResponse,
     StudentDashboardResponse,
     TeacherDashboardResponse,
@@ -54,6 +55,35 @@ async def principal_dashboard(
 
     service = DashboardService(db)
     result = await service.get_principal_dashboard(
+        school_id=school_id,
+        user_id=user_id,
+    )
+
+    return result
+
+
+# ── Parent Dashboard ──────────────────────────────────────────
+
+
+@router.get(
+    "/dashboard/parent",
+    response_model=ParentDashboardResponse,
+)
+async def parent_dashboard(
+    current_user: User = Depends(require_role("parent")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get parent dashboard — school updates overview.
+
+    Requires ``parent`` role.
+    Returns school-wide attendance percentage, recent announcements,
+    and unread notifications.
+    """
+    user_id = str(current_user.id)
+    school_id = str(current_user.school_id)
+
+    service = DashboardService(db)
+    result = await service.get_parent_dashboard(
         school_id=school_id,
         user_id=user_id,
     )

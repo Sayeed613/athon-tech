@@ -14,6 +14,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps.auth import get_current_user, require_role
 from app.api.schemas.attendance import (
@@ -31,7 +32,10 @@ from app.domain.academic.academic_calendar_service import (
     AcademicYearService,
 )
 from app.models.attendance import Attendance
+from app.models.parent import Parent
+from app.models.school import School
 from app.models.student import Student
+from app.models.student_parent import StudentParent
 from app.models.teacher import Teacher
 from app.models.user import User
 from app.repository.academic_term import AcademicTermRepository
@@ -181,6 +185,75 @@ def _build_service(db: AsyncSession) -> AttendanceService:
     )
 
 
+async def _notify_absences(
+    db: AsyncSession,
+    records: list[Attendance],
+    school_name: str,
+    school_id: str,
+) -> None:
+    """For each absent student, dispatch a WhatsApp alert to their parents.
+
+    Uses the existing Celery task ``send_absence_whatsapp`` which falls
+    back to dev-mode logging when WhatsApp is not configured.
+    """
+    from app.workers.tasks.notification_tasks import send_absence_whatsapp
+
+    absent_records = [r for r in records if hasattr(r, "status") and r.status == "absent"]
+    if not absent_records:
+        return
+
+    date_str = records[0].date.strftime("%B %d, %Y") if records[0].date else date.today().strftime("%B %d, %Y")
+
+    for record in absent_records:
+        student_id = str(record.student_id)
+
+        # Get student's user info for the student name
+        student_result = await db.execute(
+            select(Student).where(Student.id == student_id).options(
+                selectinload(Student.user)
+            )
+        )
+        student = student_result.scalar_one_or_none()
+        if student is None:
+            continue
+
+        student_name = (
+            f"{student.user.first_name} {student.user.last_name}"
+            if student.user else str(student_id)
+        )
+
+        # Find parents who have opted in for WhatsApp
+        sp_result = await db.execute(
+            select(StudentParent).where(
+                StudentParent.student_id == student_id,
+                StudentParent.receive_whatsapp == True,
+            )
+        )
+        student_parents = list(sp_result.scalars().all())
+
+        for sp in student_parents:
+            parent_result = await db.execute(
+                select(Parent).where(Parent.id == sp.parent_id).options(
+                    selectinload(Parent.user)
+                )
+            )
+            parent = parent_result.scalar_one_or_none()
+            if parent is None or parent.user is None or not parent.user.phone:
+                continue
+
+            # Dispatch Celery task (logs in dev, sends in prod)
+            send_absence_whatsapp.delay(
+                parent_phone=parent.user.phone,
+                student_name=student_name,
+                school_name=school_name,
+                date_str=date_str,
+            )
+            logger.info(
+                "Dispatched absence alert to %s for %s (absent %s)",
+                parent.user.phone, student_name, date_str,
+            )
+
+
 # ── Endpoints ───────────────────────────────────────────────────
 
 
@@ -268,6 +341,14 @@ async def batch_mark_attendance(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         )
+
+    # Fire WhatsApp alerts for absent students (Celery .delay() is non-blocking)
+    school_result = await db.execute(
+        select(School).where(School.id == current_user.school_id)
+    )
+    school = school_result.scalar_one_or_none()
+    school_name = school.name if school else "School"
+    await _notify_absences(db, records, school_name, str(current_user.school_id))
 
     return AttendanceListResponse(
         records=[_build_attendance_response(r) for r in records],

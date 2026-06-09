@@ -33,6 +33,7 @@ class DashboardService:
         from app.models.student import Student
         from app.models.teacher import Teacher
         from app.models.academic_class import Class
+        from app.models.parent import Parent
 
         result: dict[str, int] = {}
 
@@ -54,6 +55,16 @@ class DashboardService:
                 )
             )
             result["teachers"] = r.scalar() or 0
+
+        # Count parents always (lightweight query)
+        if count_students:
+            r = await self.db.execute(
+                select(func.count(Parent.id)).where(
+                    Parent.school_id == school_id,
+                    Parent.deleted_at.is_(None),
+                )
+            )
+            result["parents"] = r.scalar() or 0
 
         if count_classes:
             r = await self.db.execute(
@@ -126,6 +137,7 @@ class DashboardService:
 
         result = await self.db.execute(
             select(Class.id, Class.name, Class.section)
+            .select_from(Class)
             .join(TeacherClassSubject, Class.id == TeacherClassSubject.class_id)
             .where(
                 TeacherClassSubject.teacher_id == teacher_profile_id,
@@ -285,13 +297,14 @@ class DashboardService:
                 Period.end_time,
                 Class.room_number,
             )
+            .select_from(TimetableEntry)
             .join(Class, TimetableEntry.class_id == Class.id)
             .join(Subject, TimetableEntry.subject_id == Subject.id)
             .join(Period, TimetableEntry.period_id == Period.id)
             .where(
                 TimetableEntry.teacher_id == teacher_profile_id,
                 TimetableEntry.school_id == school_id,
-                TimetableEntry.day_of_week == day_name,
+                TimetableEntry.day_of_week == day_of_week,
                 TimetableEntry.deleted_at.is_(None),
                 Class.deleted_at.is_(None),
                 Subject.deleted_at.is_(None),
@@ -343,6 +356,7 @@ class DashboardService:
 
         result = await self.db.execute(
             select(func.count(HomeworkSubmission.id))
+            .select_from(HomeworkSubmission)
             .join(Homework, HomeworkSubmission.homework_id == Homework.id)
             .where(
                 Homework.teacher_id == teacher_profile_id,
@@ -360,6 +374,7 @@ class DashboardService:
         now = datetime.now(timezone.utc)
         result = await self.db.execute(
             select(func.count(Test.id))
+            .select_from(Test)
             .where(
                 Test.teacher_id == teacher_profile_id,
                 Test.scheduled_at > now,
@@ -432,12 +447,13 @@ class DashboardService:
                 Period.start_time,
                 Period.end_time,
             )
+            .select_from(TimetableEntry)
             .join(Subject, TimetableEntry.subject_id == Subject.id)
             .join(Period, TimetableEntry.period_id == Period.id)
             .where(
                 TimetableEntry.class_id == class_id,
                 TimetableEntry.school_id == school_id,
-                TimetableEntry.day_of_week == day_name,
+                TimetableEntry.day_of_week == day_of_week,
                 TimetableEntry.deleted_at.is_(None),
                 Subject.deleted_at.is_(None),
                 Period.deleted_at.is_(None),
@@ -524,6 +540,34 @@ class DashboardService:
             for r in rows
         ]
 
+    # ── Dashboard: Parent ────────────────────────────────────────
+
+    async def get_parent_dashboard(
+        self,
+        school_id: str,
+        user_id: str,
+    ) -> dict:
+        """Compose parent dashboard data.
+
+        Shows school-wide attendance percentage, recent announcements,
+        and unread notifications. Child-specific data will be added
+        when parent-child linking is implemented.
+        """
+        # Round-trip 1: Attendance summary
+        att = await report_queries.get_attendance_summary(
+            self.db, school_id,
+        )
+
+        # Round-trip 2: Announcements + unread notifications
+        announcements = await self._get_recent_announcements(school_id)
+        unread = await self._count_unread_notifications(user_id, school_id)
+
+        return {
+            "attendance_percentage": att["present_percentage"],
+            "recent_announcements": announcements,
+            "unread_notifications": {"count": unread},
+        }
+
     # ── Dashboard: Admin ────────────────────────────────────────
 
     async def get_admin_dashboard(
@@ -536,6 +580,7 @@ class DashboardService:
         counts = await self._batch_counts(school_id, count_students=True, count_teachers=True, count_classes=True)
         total_students = counts.get("students", 0)
         total_teachers = counts.get("teachers", 0)
+        total_parents = counts.get("parents", 0)
         active_classes = counts.get("classes", 0)
 
         # Round-trip 2: Attendance summary
@@ -550,6 +595,7 @@ class DashboardService:
         return {
             "total_students": total_students,
             "total_teachers": total_teachers,
+            "total_parents": total_parents,
             "active_classes": active_classes,
             "attendance_percentage": att["present_percentage"],
             "recent_announcements": announcements,

@@ -49,6 +49,17 @@ from app.repository.homework_submission_repo import HomeworkSubmissionRepository
 from app.repository.teacher_class_subject_repo import TeacherClassSubjectRepository
 from pydantic import BaseModel, Field
 
+
+class UpdateHomeworkBaseRequest(BaseModel):
+    """Request body for updating a homework assignment."""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=5000)
+    due_date: datetime | None = Field(None)
+    max_score: float | None = Field(None, gt=0)
+    is_published: bool | None = Field(None)
+
+
 logger = logging.getLogger("athon")
 
 router = APIRouter(tags=["homework"])
@@ -81,6 +92,17 @@ class StudentHomeworkQuestionResponse(BaseModel):
     question_text: str = Field(..., description="Question text")
     options: list[str] | None = Field(None, description="MCQ options")
     max_points: float = Field(..., description="Maximum points")
+
+
+class CreateQuestionItem(BaseModel):
+    """A single question to add to a homework."""
+
+    question_text: str = Field(..., min_length=1, max_length=5000, description="Question text")
+    question_type: str = Field("short_answer", description="Question type: multiple_choice, short_answer, true_false")
+    options: list[str] | None = Field(None, description="MCQ options")
+    correct_answer: str | None = Field(None, description="Correct answer text")
+    explanation: str | None = Field(None, max_length=2000, description="Answer explanation")
+    max_points: float = Field(1.0, gt=0, description="Maximum points for this question")
 
 
 # ── Helper Functions ────────────────────────────────────────────
@@ -288,6 +310,51 @@ async def create_homework(
         )
 
     return _build_homework_response(homework)
+
+
+@router.patch(
+    "/homework/{homework_id}",
+    response_model=HomeworkDetailResponse,
+)
+async def update_homework(
+    homework_id: str,
+    body: UpdateHomeworkBaseRequest,
+    current_user: User = Depends(require_role("teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a homework assignment.
+
+    Teachers can only update homework they created.
+    Only provided fields are updated (partial update).
+    """
+    teacher_id = await _get_teacher_id_for_user(db, current_user)
+    repo = HomeworkRepository(db)
+
+    hw = await repo.get(homework_id)
+    if hw is None or str(hw.teacher_id) != teacher_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your homework")
+
+    update_data = body.model_dump(exclude_none=True)
+    for key, value in update_data.items():
+        setattr(hw, key, value)
+
+    await db.commit()
+
+    # Return updated homework with questions
+    updated = await repo.get_with_questions(homework_id)
+    resp = _build_homework_response(updated)
+    detail = HomeworkDetailResponse(**resp.model_dump())
+    if updated and hasattr(updated, "questions") and updated.questions:
+        for q in updated.questions:
+            q_data = {
+                "id": str(q.id), "question_number": q.sort_order or 0,
+                "question_type": q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
+                "question_text": q.question_text, "options": q.options,
+                "max_points": float(q.points) if q.points else 0,
+                "correct_answer": q.correct_answer, "explanation": q.explanation,
+            }
+            detail.questions.append(q_data)
+    return detail
 
 
 @router.get(
@@ -619,6 +686,296 @@ async def grade_submission(
     # Re-fetch to get updated state
     updated = await sub_repo.get(submission_id)
     return _build_submission_response(updated)
+
+
+# ── Save Homework Questions (AI-generated) ────────────────────
+
+
+class SaveQuestionsRequest(BaseModel):
+    """Request body for saving questions to a homework."""
+
+    questions: list[CreateQuestionItem] = Field(
+        ..., min_length=1, max_length=50,
+        description="Questions to save to this homework",
+    )
+
+
+@router.post(
+    "/homework/{homework_id}/questions",
+    response_model=HomeworkDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def save_homework_questions(
+    homework_id: str,
+    body: SaveQuestionsRequest,
+    current_user: User = Depends(require_role("teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save AI-generated questions to a homework.
+
+    Teachers can only add questions to homework they created.
+    Existing questions are preserved; new questions are appended.
+    """
+    teacher_id = await _get_teacher_id_for_user(db, current_user)
+    repo = HomeworkRepository(db)
+
+    # Verify teacher owns this homework
+    hw = await repo.get(homework_id)
+    if hw is None or str(hw.teacher_id) != teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teachers can only add questions to their own homework",
+        )
+
+    from app.models.enums import QuestionType
+    from app.models.homework_question import HomeworkQuestion
+
+    # Get current max sort_order to append
+    existing_hw = await repo.get_with_questions(homework_id)
+    current_max_order = 0
+    if existing_hw and hasattr(existing_hw, "questions") and existing_hw.questions:
+        current_max_order = max((q.sort_order or 0) for q in existing_hw.questions)
+
+    for i, q_item in enumerate(body.questions):
+        # Map question_type string to enum value
+        qt_value = q_item.question_type
+        try:
+            qt_enum = QuestionType(qt_value)
+        except ValueError:
+            qt_enum = QuestionType.SHORT_ANSWER
+
+        question = HomeworkQuestion(
+            homework_id=hw.id,
+            question_text=q_item.question_text,
+            question_type=qt_enum,
+            options=q_item.options,
+            correct_answer=q_item.correct_answer,
+            explanation=q_item.explanation,
+            points=q_item.max_points,
+            sort_order=current_max_order + i + 1,
+        )
+        db.add(question)
+
+    await db.commit()
+
+    # Return updated homework with questions
+    updated = await repo.get_with_questions(homework_id)
+    resp = _build_homework_response(updated)
+    detail = HomeworkDetailResponse(**resp.model_dump())
+
+    if updated and hasattr(updated, "questions") and updated.questions:
+        for q in updated.questions:
+            q_data = {
+                "id": str(q.id),
+                "question_number": q.sort_order or 0,
+                "question_type": q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
+                "question_text": q.question_text,
+                "options": q.options,
+                "max_points": float(q.points) if q.points else 0,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation,
+            }
+            detail.questions.append(q_data)
+
+    return detail
+
+
+# ── Single Question PATCH / DELETE ──────────────────────────────
+
+
+class ReorderQuestionsRequest(BaseModel):
+    """Request body for reordering homework questions."""
+
+    question_ids: list[str] = Field(
+        ..., min_length=1, description="Question IDs in the desired order"
+    )
+
+
+class UpdateQuestionRequest(BaseModel):
+    """Request body for updating a single homework question."""
+
+    question_text: str | None = Field(None, min_length=1, max_length=5000)
+    question_type: str | None = Field(None, description="multiple_choice, short_answer, true_false")
+    options: list[str] | None = Field(None)
+    correct_answer: str | None = Field(None)
+    explanation: str | None = Field(None, max_length=2000)
+    max_points: float | None = Field(None, gt=0)
+
+
+@router.patch(
+    "/homework/{homework_id}/questions/{question_id}",
+    response_model=HomeworkDetailResponse,
+)
+async def update_homework_question(
+    homework_id: str,
+    question_id: str,
+    body: UpdateQuestionRequest,
+    current_user: User = Depends(require_role("teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a single question in a homework.
+
+    Only the teacher who created the homework can update questions.
+    Only provided fields are updated (partial update).
+    """
+    teacher_id = await _get_teacher_id_for_user(db, current_user)
+    repo = HomeworkRepository(db)
+
+    hw = await repo.get(homework_id)
+    if hw is None or str(hw.teacher_id) != teacher_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your homework")
+
+    from app.models.homework_question import HomeworkQuestion
+
+    result = await db.execute(
+        select(HomeworkQuestion).where(
+            HomeworkQuestion.id == question_id,
+            HomeworkQuestion.homework_id == homework_id,
+        )
+    )
+    question = result.scalar_one_or_none()
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    update_data = body.model_dump(exclude_none=True)
+    if "max_points" in update_data:
+        update_data["points"] = update_data.pop("max_points")
+    if "question_type" in update_data:
+        from app.models.enums import QuestionType
+        try:
+            update_data["question_type"] = QuestionType(update_data["question_type"])
+        except ValueError:
+            pass  # keep existing
+
+    for key, value in update_data.items():
+        setattr(question, key, value)
+
+    await db.commit()
+
+    # Return updated homework with questions
+    updated = await repo.get_with_questions(homework_id)
+    resp = _build_homework_response(updated)
+    detail = HomeworkDetailResponse(**resp.model_dump())
+    if updated and hasattr(updated, "questions") and updated.questions:
+        for q in updated.questions:
+            q_data = {
+                "id": str(q.id), "question_number": q.sort_order or 0,
+                "question_type": q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
+                "question_text": q.question_text, "options": q.options,
+                "max_points": float(q.points) if q.points else 0,
+                "correct_answer": q.correct_answer, "explanation": q.explanation,
+            }
+            detail.questions.append(q_data)
+    return detail
+
+
+@router.delete(
+    "/homework/{homework_id}/questions/{question_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_homework_question(
+    homework_id: str,
+    question_id: str,
+    current_user: User = Depends(require_role("teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a single question from a homework.
+
+    Only the teacher who created the homework can delete questions.
+    """
+    teacher_id = await _get_teacher_id_for_user(db, current_user)
+    repo = HomeworkRepository(db)
+
+    hw = await repo.get(homework_id)
+    if hw is None or str(hw.teacher_id) != teacher_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your homework")
+
+    from app.models.homework_question import HomeworkQuestion
+
+    result = await db.execute(
+        select(HomeworkQuestion).where(
+            HomeworkQuestion.id == question_id,
+            HomeworkQuestion.homework_id == homework_id,
+        )
+    )
+    question = result.scalar_one_or_none()
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    await db.delete(question)
+    await db.commit()
+
+
+# ── Reorder Questions ───────────────────────────────────────────
+
+
+@router.patch(
+    "/homework/{homework_id}/questions/reorder",
+    response_model=HomeworkDetailResponse,
+)
+async def reorder_homework_questions(
+    homework_id: str,
+    body: ReorderQuestionsRequest,
+    current_user: User = Depends(require_role("teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reorder questions in a homework.
+
+    Accepts an ordered list of question IDs. The server assigns
+    sequential sort_order values (1, 2, 3, ...) based on the order.
+    Only the teacher who created the homework can reorder questions.
+    """
+    teacher_id = await _get_teacher_id_for_user(db, current_user)
+    repo = HomeworkRepository(db)
+
+    hw = await repo.get(homework_id)
+    if hw is None or str(hw.teacher_id) != teacher_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your homework")
+
+    from app.models.homework_question import HomeworkQuestion
+
+    # Fetch all existing questions for this homework
+    result = await db.execute(
+        select(HomeworkQuestion).where(
+            HomeworkQuestion.homework_id == homework_id,
+        ).order_by(HomeworkQuestion.sort_order)
+    )
+    existing_questions = result.scalars().all()
+    existing_ids = {str(q.id) for q in existing_questions}
+
+    # Validate all provided IDs exist
+    for qid in body.question_ids:
+        if qid not in existing_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Question {qid} not found in this homework",
+            )
+
+    # Build a lookup by ID
+    question_map = {str(q.id): q for q in existing_questions}
+
+    # Update sort_order based on position in the array
+    for i, qid in enumerate(body.question_ids):
+        question = question_map[qid]
+        question.sort_order = i + 1
+
+    await db.commit()
+
+    # Return updated homework with questions in new order
+    updated = await repo.get_with_questions(homework_id)
+    resp = _build_homework_response(updated)
+    detail = HomeworkDetailResponse(**resp.model_dump())
+    if updated and hasattr(updated, "questions") and updated.questions:
+        for q in sorted(updated.questions, key=lambda x: x.sort_order or 0):
+            q_data = {
+                "id": str(q.id), "question_number": q.sort_order or 0,
+                "question_type": q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
+                "question_text": q.question_text, "options": q.options,
+                "max_points": float(q.points) if q.points else 0,
+                "correct_answer": q.correct_answer, "explanation": q.explanation,
+            }
+            detail.questions.append(q_data)
+    return detail
 
 
 # ── Student My Submission ───────────────────────────────────────

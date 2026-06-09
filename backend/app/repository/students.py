@@ -120,8 +120,11 @@ class StudentRepository(BaseRepository[Student]):
         count_result = await self.db.execute(count_query)
         total = count_result.scalar_one()
 
-        # Fetch paginated
-        query = base_query.options(selectinload(Student.class_))
+        # Fetch paginated with eagerly loaded user and class
+        query = base_query.options(
+            selectinload(Student.class_),
+            selectinload(Student.user),
+        )
         query = query.order_by(User.first_name).offset(skip).limit(limit)
         result = await self.db.execute(query)
 

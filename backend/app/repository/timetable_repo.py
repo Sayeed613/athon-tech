@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.teacher import Teacher
 from app.models.timetable_entry import TimetableEntry
 from app.repository.base import BaseRepository
 
@@ -30,7 +31,7 @@ class TimetableRepository(BaseRepository[TimetableEntry]):
         selectinload(TimetableEntry.academic_term),
         selectinload(TimetableEntry.class_),
         selectinload(TimetableEntry.subject),
-        selectinload(TimetableEntry.teacher),
+        selectinload(TimetableEntry.teacher).selectinload(Teacher.user),
         selectinload(TimetableEntry.period),
     )
 

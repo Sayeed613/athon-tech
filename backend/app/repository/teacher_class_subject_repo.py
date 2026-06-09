@@ -67,6 +67,22 @@ class TeacherClassSubjectRepository(BaseRepository[TeacherClassSubject]):
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def get_by_teacher_and_term(
+        self,
+        teacher_id: str,
+        academic_term_id: str,
+    ) -> list[TeacherClassSubject]:
+        """Fetch assignments for a specific teacher in a specific term."""
+        query = (
+            select(self.model)
+            .where(self.model.teacher_id == teacher_id)
+            .where(self.model.academic_term_id == academic_term_id)
+            .where(self.model.deleted_at.is_(None))
+            .options(*self._DEFAULT_OPTIONS)
+        )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def get_multi(  # type: ignore[override]
         self,
         *,

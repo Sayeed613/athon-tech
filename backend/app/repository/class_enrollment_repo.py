@@ -108,6 +108,15 @@ class ClassEnrollmentRepository(BaseRepository[ClassEnrollment]):
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_by_class(self, class_id: str) -> list[ClassEnrollment]:
+        """Get all active enrollments for a class."""
+        query = select(self.model).where(
+            self.model.class_id == class_id,
+            self.model.status == "active",
+        )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def soft_delete(self, id: str) -> None:  # type: ignore[override]
         """Not supported — ClassEnrollment has no ``deleted_at`` column.
 
