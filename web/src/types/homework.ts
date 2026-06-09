@@ -18,6 +18,8 @@ export interface HomeworkItem {
   teacher: HomeworkTeacherInfo | null;
   class_: HomeworkClassInfo | null;
   subject: HomeworkSubjectInfo | null;
+  /** Questions attached to this homework (from detail endpoint) */
+  questions?: Array<Record<string, unknown>>;
 }
 
 export interface HomeworkTeacherInfo {

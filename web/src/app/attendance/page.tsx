@@ -13,6 +13,7 @@ import {
   UserX,
   Clock,
   ArrowRight,
+  Building2,
 } from "lucide-react";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { useUserRole } from "@/hooks/use-auth";
@@ -31,6 +32,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { queryKeys } from "@/lib/query-keys";
 import { attendanceService } from "@/services/attendance.service";
 import { classService } from "@/services/class.service";
@@ -42,6 +51,7 @@ export default function AttendancePage() {
   const { toast } = useToast();
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [selectedClassId, setSelectedClassId] = useState("all");
+  const [showClassPicker, setShowClassPicker] = useState(false);
   const canMark = role.isTeacher;
 
   const { data: classesData } = useQuery({
@@ -256,10 +266,12 @@ export default function AttendancePage() {
           <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {
             if (selectedClassId !== "all") {
               router.push(`/attendance/class/${selectedClassId}`);
-            } else if (classes.length > 0) {
+            } else if (classes.length === 1) {
               router.push(`/attendance/class/${classes[0].id}`);
+            } else if (classes.length > 1) {
+              setShowClassPicker(true);
             } else {
-              toast({ title: "Select a class", description: "Please select a class first to view attendance.", variant: "destructive" });
+              toast({ title: "No classes", description: "No classes available. Set up classes first.", variant: "destructive" });
             }
           }}>
             <CardContent className="p-6 flex items-center gap-4">
@@ -274,6 +286,39 @@ export default function AttendancePage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Class Picker Dialog */}
+        <Dialog open={showClassPicker} onOpenChange={setShowClassPicker}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Select Class</DialogTitle>
+              <DialogDescription>Choose a class to view attendance.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-2">
+              {classes.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+                  onClick={() => {
+                    setShowClassPicker(false);
+                    router.push(`/attendance/class/${c.id}`);
+                  }}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Building2 className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{c.name}{c.section ? ` - ${c.section}` : ""}</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
+                </div>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowClassPicker(false)}>Cancel</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </ContentContainer>
     </AdminLayout>
   );

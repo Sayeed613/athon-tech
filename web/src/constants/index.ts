@@ -77,7 +77,6 @@ export const ADMIN_NAV: NavItem[] = [
     href: "#",
     icon: "settings",
     children: [
-      { label: "School Leadership", href: "/settings/leadership", icon: "crown" },
       { label: "School Profile", href: "/settings", icon: "settings" },
     ],
   },
@@ -313,6 +312,7 @@ export const API_ENDPOINTS = {
     ENTRY: (id: string) => `/timetable/entries/${id}`,
     BY_CLASS: (id: string) => `/timetable/class/${id}`,
     BY_TEACHER: (id: string) => `/timetable/teacher/${id}`,
+    MY_TEACHER: "/timetable/teacher/me",
     TODAY: "/timetable/today",
   },
   SCHOOLS: {
@@ -324,6 +324,7 @@ export const API_ENDPOINTS = {
     PRINCIPAL: "/dashboard/principal",
     TEACHER: "/dashboard/teacher",
     STUDENT: "/dashboard/student",
+    PARENT: "/dashboard/parent",
   },
   REPORTS: {
     ATTENDANCE: "/reports/attendance",

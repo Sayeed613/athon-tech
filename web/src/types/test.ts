@@ -119,3 +119,15 @@ export interface StudentTestQuestion {
   max_points: number;
 }
 
+// ── AI Generated Test Questions ────────────────────────────────
+
+export interface AITestQuestion {
+  question_number: number;
+  question_type: string;
+  question_text: string;
+  options: string[] | null;
+  correct_answer: string;
+  explanation: string;
+  max_points: number;
+}
+

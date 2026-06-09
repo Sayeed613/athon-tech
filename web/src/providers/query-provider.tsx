@@ -14,10 +14,11 @@ export function QueryProvider({ children }: QueryProviderProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: config.cache.staleTime,
-            gcTime: config.cache.gcTime,
+            staleTime: config.staleTimes.reference, // 5min default for reference data
+            gcTime: config.cache.gcTime, // 30min
             retry: config.api.retryCount,
             refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
           },
           mutations: {
             retry: 0,

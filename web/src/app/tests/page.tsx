@@ -62,6 +62,14 @@ export default function TestsPage() {
     }
   }, [selectedClassId, fallbackClassId, isStudentView]);
 
+  // Students see their own tests via dedicated endpoint
+  const studentTestsQuery = useQuery({
+    queryKey: [...queryKeys.tests.all, "my-tests"],
+    queryFn: () => testService.getMyTests(),
+    enabled: isStudentView,
+    staleTime: 30_000,
+  });
+
   const testsQuery = useQuery({
     queryKey: queryKeys.tests.byClass(selectedClassId),
     queryFn: () => testService.getByClass(selectedClassId, {
@@ -71,9 +79,15 @@ export default function TestsPage() {
     staleTime: 30_000,
   });
 
-  const allTests = testsQuery.data?.tests ?? [];
-  const isLoading = selectedClassId !== "all" && testsQuery.isLoading;
-  const isError = selectedClassId !== "all" && testsQuery.isError;
+  const allTests = isStudentView
+    ? (studentTestsQuery.data?.tests ?? [])
+    : (testsQuery.data?.tests ?? []);
+  const isLoading = isStudentView
+    ? studentTestsQuery.isLoading
+    : (selectedClassId !== "all" && testsQuery.isLoading);
+  const isError = isStudentView
+    ? studentTestsQuery.isError
+    : (selectedClassId !== "all" && testsQuery.isError);
 
   const filtered = useMemo(() => {
     if (!search) return allTests;

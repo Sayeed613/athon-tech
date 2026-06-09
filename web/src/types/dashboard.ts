@@ -27,6 +27,14 @@ export interface AdminDashboardResponse {
   unread_notifications: UnreadCountWidget;
 }
 
+// ── Parent Dashboard Response ────────────────────────────────
+
+export interface ParentDashboardResponse {
+  attendance_percentage: number;
+  recent_announcements: AnnouncementItem[];
+  unread_notifications: UnreadCountWidget;
+}
+
 // ── Principal Dashboard Response ──────────────────────────────
 
 export interface PrincipalDashboardResponse {
@@ -185,6 +193,7 @@ export interface DashboardState {
 // ── Homework Question Types (for AI generation) ───────────────
 
 export interface AIQuestion {
+  id: string;
   question_number: number;
   question_type: string;
   question_text: string;

@@ -142,6 +142,14 @@ export const dashboardService = {
     return data;
   },
 
+  /** GET /dashboard/parent — parent dashboard */
+  async getParentDashboard(): Promise<import("@/types/dashboard").ParentDashboardResponse> {
+    const { data } = await http.get<import("@/types/dashboard").ParentDashboardResponse>(
+      API_ENDPOINTS.DASHBOARD.PARENT
+    );
+    return data;
+  },
+
   /**
    * Compose all dashboard data for the admin view.
    * Runs queries in parallel for minimal loading time.

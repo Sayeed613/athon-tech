@@ -63,6 +63,14 @@ export const testService = {
     return data;
   },
 
+  /** GET /tests/student/me — get published tests for authenticated student */
+  async getMyTests(): Promise<TestListResponse> {
+    const { data } = await http.get<TestListResponse>(
+      "/tests/student/me"
+    );
+    return data;
+  },
+
   /** POST /tests/{id}/start — start a test attempt */
   async startTest(testId: string): Promise<TestAttempt> {
     const { data } = await http.post<TestAttempt>(
@@ -75,6 +83,24 @@ export const testService = {
   async submitTest(testId: string): Promise<TestAttempt> {
     const { data } = await http.post<TestAttempt>(
       `/tests/${testId}/submit`
+    );
+    return data;
+  },
+
+  /** POST /ai/generate-test — generate AI test questions */
+  async generateAI(payload: {
+    class_name: string;
+    subject_name: string;
+    chapter_topic: string;
+    test_type: string;
+    question_count: number;
+    total_marks: number;
+    duration_minutes: number;
+    difficulty: string;
+  }): Promise<{ title: string; questions: import("@/types/test").AITestQuestion[] }> {
+    const { data } = await http.post<{ title: string; questions: import("@/types/test").AITestQuestion[] }>(
+      "/ai/generate-test",
+      payload
     );
     return data;
   },

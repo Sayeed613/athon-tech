@@ -37,8 +37,16 @@ export const config = {
   },
 
   cache: {
-    staleTime: 30 * 1000, // 30s
-    gcTime: 5 * 60 * 1000, // 5min
+    staleTime: 2 * 60 * 1000, // 2min — reference data rarely changes
+    gcTime: 30 * 60 * 1000, // 30min — keep cached across navigations
+  },
+
+  /** Longer stale times for data that changes less frequently */
+  staleTimes: {
+    reference: 5 * 60 * 1000, // 5min — school, academic years, terms, classes, subjects
+    dashboard: 2 * 60 * 1000, // 2min — dashboard aggregate data
+    active: 60 * 1000, // 1min — attendance, homework, tests in progress
+    realtime: 15 * 1000, // 15s — notifications, quick-refresh data
   },
 } as const;
 

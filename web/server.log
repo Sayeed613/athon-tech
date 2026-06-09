@@ -1,0 +1,7 @@
+⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::3000
+    at <unknown> (Error: listen EADDRINUSE: address already in use :::3000)⚠ Slow filesystem detected. The benchmark took 421ms. If D:\Project\athon-tech\web\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+
+○ Compiling / ...
+ GET / 307 in 42s (next.js: 41s, application-code: 1012ms)

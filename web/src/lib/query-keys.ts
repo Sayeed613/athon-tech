@@ -56,6 +56,7 @@ export const queryKeys = {
     all: ["timetable"] as const,
     byClass: (classId: string) => ["timetable", "class", classId] as const,
     byTeacher: (teacherId: string) => ["timetable", "teacher", teacherId] as const,
+    myTeacher: ["timetable", "my-teacher"] as const,
     today: ["timetable", "today"] as const,
   },
   school: {
@@ -66,6 +67,7 @@ export const queryKeys = {
     principal: ["dashboard", "principal"] as const,
     teacher: ["dashboard", "teacher"] as const,
     student: ["dashboard", "student"] as const,
+    parent: ["dashboard", "parent"] as const,
   },
   reports: {
     attendance: (params?: Record<string, unknown>) => ["reports", "attendance", params] as const,

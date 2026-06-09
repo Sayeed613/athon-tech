@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -63,6 +63,7 @@ function StudentTestView({ testId }: { testId: string }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<string | null>(null);
 
   const { data: test, isLoading, isError } = useQuery({
     queryKey: queryKeys.tests.detail(testId),
@@ -86,8 +87,9 @@ function StudentTestView({ testId }: { testId: string }) {
   // Start test mutation
   const startMutation = useMutation({
     mutationFn: () => testService.startTest(testId),
-    onSuccess: () => {
+    onSuccess: (attempt) => {
       setStartError(null);
+      setStartedAt(attempt.started_at);
       setViewState("taking");
     },
     onError: (err: Error) => {
@@ -110,25 +112,48 @@ function StudentTestView({ testId }: { testId: string }) {
     },
   });
 
-  // Timer effect
-  useEffect(() => {
-    if (viewState !== "taking" || !test?.duration_minutes || isAlreadySubmitted) return;
+  // Timer effect — synced with server started_at, auto-submits on expire
+  const autoSubmitRef = useRef(false);
 
-    const totalSeconds = test.duration_minutes * 60;
-    setTimeRemaining(totalSeconds);
+  useEffect(() => {
+    if (viewState !== "taking" || !test?.duration_minutes || isAlreadySubmitted || !startedAt) return;
+
+    const startedMs = new Date(startedAt).getTime();
+    const durationMs = test.duration_minutes * 60 * 1000;
+    const nowMs = Date.now();
+    const elapsedMs = nowMs - startedMs;
+    const initialRemaining = Math.max(0, Math.floor((durationMs - elapsedMs) / 1000));
+
+    setTimeRemaining(initialRemaining);
+
+    if (initialRemaining <= 0) {
+      // Already expired — auto-submit immediately
+      if (!autoSubmitRef.current) {
+        autoSubmitRef.current = true;
+        submitMutation.mutate();
+      }
+      return;
+    }
 
     const interval = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev === null || prev <= 1) {
           clearInterval(interval);
+          // Auto-submit when time expires
+          if (!autoSubmitRef.current) {
+            autoSubmitRef.current = true;
+            submitMutation.mutate();
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [viewState, test?.duration_minutes, isAlreadySubmitted]);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [viewState, test?.duration_minutes, isAlreadySubmitted, startedAt]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);

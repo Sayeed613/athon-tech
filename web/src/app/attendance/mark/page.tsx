@@ -47,6 +47,7 @@ import { studentService } from "@/services/student.service";
 import { academicService } from "@/services/academic.service";
 import { cn } from "@/lib/utils";
 import type { BatchAttendanceItem } from "@/types/attendance";
+import type { TimetableEntry } from "@/types/timetable";
 
 // ── Mobile-friendly tap-to-cycle status implementation ─────────
 
@@ -105,9 +106,9 @@ export default function MarkAttendancePage() {
   // For teachers: fetch timetable to get assigned classes
   const user = useAuthStore((s) => s.user);
   const { data: timetableData } = useQuery({
-    queryKey: queryKeys.timetable.byTeacher(user?.id ?? ''),
-    queryFn: () => timetableService.getByTeacher(user?.id ?? ''),
-    enabled: role.isTeacher && !!user?.id,
+    queryKey: queryKeys.timetable.myTeacher,
+    queryFn: () => timetableService.getMyTimetable(),
+    enabled: role.isTeacher,
     staleTime: 60_000,
   });
 
@@ -122,7 +123,7 @@ export default function MarkAttendancePage() {
   // Filter to teacher's assigned classes based on timetable
   const assignedClassIds = useMemo(() => {
     if (!role.isTeacher || !timetableData?.entries) return null;
-    return new Set(timetableData.entries.map((e: { class_id: string }) => e.class_id));
+    return new Set(timetableData.entries.map((e: TimetableEntry) => e.class_.id));
   }, [role.isTeacher, timetableData]);
 
   const visibleClasses = useMemo(() => {

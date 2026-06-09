@@ -21,6 +21,17 @@ import {
   ArrowRight,
   FileText,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import Link from "next/link";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { ContentContainer } from "@/components/layout/content-container";
@@ -58,7 +69,8 @@ function AdminDashboard() {
     queryKey: queryKeys.dashboard.admin,
     queryFn: () => dashboardService.getAdminDashboardData(schoolId),
     enabled: !!schoolId,
-    staleTime: 30_000,
+    staleTime: 2 * 60 * 1000, // 2min — dashboard data
+    gcTime: 10 * 60 * 1000, // 10min cache
     retry: 2,
   });
 
@@ -680,6 +692,81 @@ function PrincipalDashboard() {
               </div>
             </div>
           </DashboardWidget>
+
+          {/* Attendance Gauge */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">School Attendance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-center">
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "Present", value: d.attendance_percentage },
+                        { name: "Absent", value: Math.max(0, 100 - d.attendance_percentage) },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={65}
+                      startAngle={90}
+                      endAngle={-270}
+                      dataKey="value"
+                    >
+                      <Cell fill="hsl(var(--primary))" />
+                      <Cell fill="hsl(var(--destructive))" />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <p className="text-2xl font-bold -mt-16">{d.attendance_percentage.toFixed(0)}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Attendance Rate</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Performance Comparison Bar Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Academic Performance Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart
+                  data={[
+                    {
+                      name: "Attendance",
+                      value: d.attendance_percentage,
+                    },
+                    {
+                      name: "Homework",
+                      value: d.homework_completion_rate,
+                    },
+                    {
+                      name: "Test Pass",
+                      value: d.test_pass_rate,
+                    },
+                  ]}
+                  margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                >
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {[
+                      { fill: "hsl(var(--primary))" },
+                      { fill: "#3b82f6" },
+                      { fill: "#22c55e" },
+                    ].map((entry, idx) => (
+                      <Cell key={idx} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
           {d.unread_notifications.count > 0 && (
             <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => router.push("/notifications")}>
               <CardContent className="p-4 flex items-center gap-3">
@@ -700,12 +787,10 @@ function PrincipalDashboard() {
 function ParentDashboard() {
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
-  const schoolId = user?.school_id ?? "";
 
   const { data: dashboard, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.dashboard.admin,
-    queryFn: () => dashboardService.getAdminDashboardData(schoolId),
-    enabled: !!schoolId,
+    queryKey: queryKeys.dashboard.parent,
+    queryFn: () => dashboardService.getParentDashboard(),
     staleTime: 30_000,
     retry: 2,
   });
@@ -773,8 +858,8 @@ function ParentDashboard() {
 
       {/* Announcements */}
       <div className="mt-6">
-        <DashboardWidget title="Recent Announcements" isEmpty={d.announcements.length === 0} emptyMessage="No announcements yet.">
-          <AnnouncementsWidget announcements={d.announcements} />
+        <DashboardWidget title="Recent Announcements" isEmpty={d.recent_announcements.length === 0} emptyMessage="No announcements yet.">
+          <AnnouncementsWidget announcements={d.recent_announcements} />
         </DashboardWidget>
       </div>
     </ContentContainer>

@@ -26,6 +26,14 @@ export const timetableService = {
     return data;
   },
 
+  /** GET /timetable/teacher/me — authenticated teacher's schedule */
+  async getMyTimetable(): Promise<TimetableResponse> {
+    const { data } = await http.get<TimetableResponse>(
+      API_ENDPOINTS.TIMETABLE.MY_TEACHER
+    );
+    return data;
+  },
+
   /** GET /timetable/today — today's schedule for current user */
   async getToday(): Promise<TimetableResponse> {
     const { data } = await http.get<TimetableResponse>(
